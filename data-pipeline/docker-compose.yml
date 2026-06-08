@@ -27,11 +27,15 @@ x-airflow-common:
     POSTGRES_USER: ${POSTGRES_USER:-techjob}
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-techjob123}
 
+    # Groq API Key for AI Agent features
+    GROQ_API_KEY: ${GROQ_API_KEY:-}
+
   volumes:
     - ./dags:/opt/airflow/dags          # DAG files
     - ./pipeline:/opt/airflow/pipeline  # PySpark pipeline scripts
     - ./source:/opt/airflow/source      # source modules (spark_session, storage, ...)
     - ./dbt_vietnamworks:/opt/airflow/dbt_vietnamworks   # dbt
+    - ml_models:/opt/airflow/models                      # ML models
     - airflow_logs:/opt/airflow/logs
 
   depends_on:
@@ -148,7 +152,7 @@ services:
       dockerfile: Dockerfile.airflow
     container_name: techjob-backend
     entrypoint: ["/usr/bin/dumb-init", "--", "/home/airflow/.local/bin/uvicorn"]
-    command: app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: be.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     environment:
@@ -157,12 +161,16 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-techjob_ai}
       POSTGRES_USER: ${POSTGRES_USER:-techjob}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-techjob123}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
       PYTHONPATH: /opt/airflow
     volumes:
-      - ./app:/opt/airflow/app
+      - ./be:/opt/airflow/be
+      - ./fe:/opt/airflow/fe
+      - ./ai:/opt/airflow/ai
       - ./pipeline:/opt/airflow/pipeline
       - ./source:/opt/airflow/source
       - ./.env:/opt/airflow/.env
+      - ml_models:/opt/airflow/models
     depends_on:
       postgres-project:
         condition: service_healthy
@@ -172,3 +180,4 @@ volumes:
   postgres_airflow_data:
   postgres_project_data:
   airflow_logs:
+  ml_models:

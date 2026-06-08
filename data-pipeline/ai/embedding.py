@@ -240,3 +240,9 @@ def run():
 
 if __name__ == "__main__":
     run()
+    # Also embed culture data if the table exists
+    try:
+        from source.setup_culture_table import embed_culture
+        embed_culture()
+    except Exception as e:
+        print(f"[INFO] Culture embedding skipped: {e}")
