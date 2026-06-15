@@ -23,3 +23,6 @@ models:
       +schema: warehouse       # tạo trong schema "warehouse"
       fact_job_postings:
         +materialized: incremental  # override: fact table chỉ append rows mới
+    marts:
+      +materialized: table
+      +schema: marts

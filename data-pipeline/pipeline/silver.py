@@ -90,7 +90,7 @@ def run(date_str: str):
     before = jobs_df.count()
     jobs_df = jobs_df.dropDuplicates(["jobId"])
     after = jobs_df.count()
-    print(f"Total jobs: {before} raw → {after} unique (dropped {before - after} duplicates)")
+    print(f"Total jobs: {before} raw {after} unique (dropped {before - after} duplicates)")
 
     # mode("overwrite"): nếu chạy lại cùng ngày thì ghi đè — idempotent.
     jobs_df.write.mode("overwrite").parquet(out_path)
