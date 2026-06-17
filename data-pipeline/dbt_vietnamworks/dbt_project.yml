@@ -21,11 +21,14 @@ models:
     warehouse:
       +materialized: table     # mặc định warehouse = table (dim_company, dim_skill)
       +schema: warehouse       # tạo trong schema "warehouse"
-      fact_job_postings:
+      fact_job:
         +materialized: incremental  # override: fact table chỉ append rows mới
     marts:
       +materialized: table
       +schema: marts
+    aggregates:
+      +materialized: table
+      +schema: warehouse
 
 seeds: 
   dbt_vietnamworks:

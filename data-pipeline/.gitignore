@@ -44,4 +44,6 @@ dbt_vietnamworks/.user*.yml
 .DS_Store
 Thumbs.db
 
+# --- Claude
 docs/
+scratch_*.py

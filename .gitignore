@@ -1,5 +1,4 @@
 CLAUDE.md
-
 # OS
 .DS_Store
 Thumbs.db
@@ -7,6 +6,11 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-
-# VS Code workspace (personal, không commit)
 *.code-workspace
+
+# Python
+.venv/
+data/
+__pycache__/
+.pytest_cache/
+*.py[cod]

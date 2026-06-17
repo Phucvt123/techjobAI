@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TechJob AI — IT Job Market Intelligence</title>
+    <meta name="description" content="Hệ thống phân tích thị trường tuyển dụng IT Việt Nam sử dụng AI">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2035;
+            --bg-card-hover: #1f2942;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #1e293b;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --gradient-1: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --gradient-2: linear-gradient(135deg, #06b6d4, #3b82f6);
+            --gradient-3: linear-gradient(135deg, #f43f5e, #ec4899);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── Animated Background ─────────────────────────────────── */
+        .bg-gradient {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 30% at 50% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+            z-index: 0;
+        }
+
+        /* ── Header ──────────────────────────────────────────────── */
+        header {
+            position: sticky; top: 0; z-index: 100;
+            backdrop-filter: blur(20px);
+            background: rgba(10, 14, 26, 0.85);
+            border-bottom: 1px solid var(--border);
+            padding: 0.8rem 2rem;
+        }
+
+        .header-inner {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+
+        .logo {
+            display: flex; align-items: center; gap: 0.6rem;
+            font-size: 1.3rem; font-weight: 700;
+        }
+
+        .logo-icon {
+            width: 36px; height: 36px;
+            background: var(--gradient-1);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+        }
+
+        .logo span { color: var(--accent-light); }
+
+        nav { display: flex; gap: 0.25rem; }
+
+        nav button {
+            background: transparent; border: none; color: var(--text-secondary);
+            padding: 0.6rem 1rem; border-radius: 8px; cursor: pointer;
+            font-size: 0.85rem; font-weight: 500; transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        nav button:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        nav button.active { color: var(--accent-light); background: rgba(99, 102, 241, 0.1); }
+
+        /* ── Main Layout ─────────────────────────────────────────── */
+        main {
+            max-width: 1400px; margin: 0 auto;
+            padding: 2rem; position: relative; z-index: 1;
+        }
+
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Chat Tab ────────────────────────────────────────────── */
+        .chat-container {
+            display: flex; flex-direction: column;
+            height: calc(100vh - 140px);
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 1.2rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 1rem;
+        }
+
+        .chat-header .avatar {
+            width: 40px; height: 40px;
+            background: var(--gradient-1);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .chat-header .info h3 { font-size: 0.95rem; font-weight: 600; }
+        .chat-header .info p { font-size: 0.75rem; color: var(--success); }
+
+        .chat-messages {
+            flex: 1; overflow-y: auto; padding: 1.5rem;
+            display: flex; flex-direction: column; gap: 1rem;
+        }
+
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-track { background: transparent; }
+        .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .message {
+            max-width: 85%; padding: 1rem 1.2rem;
+            border-radius: 16px; font-size: 0.9rem; line-height: 1.6;
+            animation: msgSlide 0.3s ease;
+        }
+
+        @keyframes msgSlide {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--gradient-1);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.assistant .tools-badge {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-light);
+            padding: 0.2rem 0.5rem; border-radius: 6px;
+            font-size: 0.72rem; margin-top: 0.5rem; font-weight: 500;
+        }
+
+        .message img {
+            max-width: 100%; border-radius: 10px; margin-top: 0.8rem;
+            border: 1px solid var(--border);
+        }
+
+        .chat-input-area {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            display: flex; gap: 0.8rem; align-items: center;
+        }
+
+        .chat-input-area input {
+            flex: 1; background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 12px;
+            padding: 0.8rem 1.2rem; color: var(--text-primary);
+            font-size: 0.9rem; font-family: inherit;
+            outline: none; transition: border-color 0.2s;
+        }
+
+        .chat-input-area input:focus { border-color: var(--accent); }
+        .chat-input-area input::placeholder { color: var(--text-muted); }
+
+        .btn-send {
+            width: 44px; height: 44px;
+            background: var(--gradient-1); border: none;
+            border-radius: 12px; color: white; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem; transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-send:hover { transform: scale(1.05); box-shadow: 0 4px 20px var(--accent-glow); }
+        .btn-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* ── Salary Prediction Tab ───────────────────────────────── */
+        .prediction-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+        }
+
+        .form-card, .result-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px; padding: 2rem;
+        }
+
+        .form-card h2, .result-card h2 {
+            font-size: 1.1rem; font-weight: 600; margin-bottom: 1.5rem;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+
+        .form-group { margin-bottom: 1.2rem; }
+
+        .form-group label {
+            display: block; font-size: 0.8rem; font-weight: 500;
+            color: var(--text-secondary); margin-bottom: 0.4rem;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%; background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 0.7rem 1rem; color: var(--text-primary);
+            font-size: 0.88rem; font-family: inherit; outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+
+        .btn-primary {
+            background: var(--gradient-1); border: none;
+            padding: 0.8rem 2rem; border-radius: 10px;
+            color: white; font-weight: 600; font-size: 0.9rem;
+            cursor: pointer; font-family: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 25px var(--accent-glow); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .salary-result {
+            text-align: center; padding: 2rem 0;
+        }
+
+        .salary-result .amount {
+            font-size: 2.5rem; font-weight: 800;
+            background: var(--gradient-2);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 0.3rem;
+        }
+
+        .salary-result .label {
+            font-size: 0.8rem; color: var(--text-muted);
+            display: flex; align-items: center; gap: 0.4rem;
+            justify-content: center;
+        }
+
+        .salary-result .label .badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success); padding: 0.15rem 0.5rem;
+            border-radius: 6px; font-size: 0.7rem; font-weight: 600;
+        }
+
+        .confidence-bar {
+            margin-top: 1.5rem; background: var(--bg-secondary);
+            border-radius: 8px; padding: 1rem;
+        }
+
+        .confidence-bar .bar {
+            height: 8px; background: var(--border); border-radius: 4px;
+            overflow: hidden; margin-top: 0.5rem;
+        }
+
+        .confidence-bar .bar .fill {
+            height: 100%; background: var(--gradient-2);
+            border-radius: 4px; transition: width 1s ease;
+        }
+
+        /* ── Search Tab ──────────────────────────────────────────── */
+        .search-bar {
+            display: flex; gap: 0.8rem; margin-bottom: 2rem;
+        }
+
+        .search-bar input {
+            flex: 1; background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 12px;
+            padding: 1rem 1.5rem; color: var(--text-primary);
+            font-size: 1rem; font-family: inherit; outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-bar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+        .job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1rem; }
+
+        .job-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border); border-radius: 14px;
+            padding: 1.5rem; transition: all 0.3s;
+            cursor: default;
+        }
+
+        .job-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .job-card .title { font-weight: 600; font-size: 1rem; margin-bottom: 0.3rem; }
+        .job-card .company { color: var(--accent-light); font-size: 0.85rem; font-weight: 500; }
+
+        .job-card .meta {
+            display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem;
+        }
+
+        .job-card .meta .tag {
+            background: var(--bg-secondary); border: 1px solid var(--border);
+            padding: 0.25rem 0.6rem; border-radius: 6px;
+            font-size: 0.75rem; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 0.3rem;
+        }
+
+        .job-card .similarity {
+            margin-top: 0.8rem;
+            font-size: 0.78rem; color: var(--success); font-weight: 500;
+        }
+
+        /* ── Cover Letter Tab ────────────────────────────────────── */
+        .cover-letter-form {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px; padding: 2rem;
+            max-width: 700px; margin: 0 auto;
+        }
+
+        .selected-job-glass {
+            background: rgba(99, 102, 241, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 12px;
+            padding: 1.2rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .selected-job-glass .icon {
+            width: 40px; height: 40px;
+            background: var(--gradient-1);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        .selected-job-glass .info p.job-title {
+            font-weight: 600; font-size: 1rem; color: var(--text-primary);
+        }
+
+        .selected-job-glass .info p.company {
+            font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.2rem;
+        }
+
+        .btn-card {
+            width: 100%;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 8px;
+            color: var(--accent-light);
+            padding: 0.6rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 1rem;
+            font-family: inherit;
+        }
+
+        .btn-card:hover {
+            background: var(--gradient-1);
+            color: white;
+            border-color: transparent;
+        }
+
+        .file-upload {
+            border: 2px dashed var(--border);
+            border-radius: 12px; padding: 2.5rem;
+            text-align: center; cursor: pointer;
+            transition: all 0.3s; margin-bottom: 1.5rem;
+        }
+
+        .file-upload:hover { border-color: var(--accent); background: rgba(99, 102, 241, 0.03); }
+        .file-upload.has-file { border-color: var(--success); background: rgba(16, 185, 129, 0.05); }
+
+        .file-upload i { font-size: 2rem; color: var(--text-muted); margin-bottom: 0.8rem; }
+        .file-upload p { color: var(--text-secondary); font-size: 0.9rem; }
+        .file-upload .filename { color: var(--success); font-weight: 600; margin-top: 0.3rem; }
+
+        .cover-letter-output {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px; padding: 2rem;
+            max-width: 700px; margin: 2rem auto 0;
+            white-space: pre-wrap; line-height: 1.7;
+            font-size: 0.92rem;
+        }
+
+        .matched-skills {
+            display: flex; flex-wrap: wrap; gap: 0.4rem;
+            margin-top: 1rem; padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .matched-skills .skill {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-light);
+            padding: 0.2rem 0.6rem; border-radius: 6px;
+            font-size: 0.75rem; font-weight: 500;
+        }
+
+        /* ── Loading ─────────────────────────────────────────────── */
+        .loading-dots {
+            display: inline-flex; gap: 4px; align-items: center;
+        }
+
+        .loading-dots span {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--accent-light);
+            animation: dotPulse 1.4s infinite;
+        }
+
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dotPulse {
+            0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1.2); }
+        }
+
+        /* ── Empty state ─────────────────────────────────────────── */
+        .empty-state {
+            text-align: center; padding: 4rem 2rem; color: var(--text-muted);
+        }
+
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state p { font-size: 0.95rem; }
+
+        .suggestion-chips {
+            display: flex; flex-wrap: wrap; gap: 0.5rem;
+            justify-content: center; margin-top: 1.5rem;
+        }
+
+        .suggestion-chips button {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border); border-radius: 20px;
+            padding: 0.5rem 1rem; color: var(--text-secondary);
+            font-size: 0.82rem; cursor: pointer; font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .suggestion-chips button:hover {
+            border-color: var(--accent); color: var(--accent-light);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        /* ── Responsive ──────────────────────────────────────────── */
+        @media (max-width: 768px) {
+            main { padding: 1rem; }
+            .prediction-grid { grid-template-columns: 1fr; }
+            .job-grid { grid-template-columns: 1fr; }
+            nav { gap: 0; }
+            nav button { padding: 0.5rem 0.6rem; font-size: 0.78rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <header>
+        <div class="header-inner">
+            <div class="logo">
+                <div class="logo-icon"><i class="fas fa-robot"></i></div>
+                TechJob <span>AI</span>
+            </div>
+            <nav>
+                <button class="active" onclick="switchTab('chat')"><i class="fas fa-comments"></i> AI Chat</button>
+                <button onclick="switchTab('search')"><i class="fas fa-search"></i> Tìm việc</button>
+                <button onclick="switchTab('salary')"><i class="fas fa-chart-line"></i> Dự đoán lương</button>
+                <button onclick="switchTab('cover')"><i class="fas fa-file-alt"></i> Cover Letter</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- ── Chat Tab ──────────────────────────────────────── -->
+        <div id="tab-chat" class="tab-content active">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <div class="avatar"><i class="fas fa-brain"></i></div>
+                    <div class="info">
+                        <h3>TechJob AI Assistant</h3>
+                        <p><i class="fas fa-circle" style="font-size:0.5rem"></i> Powered by Groq • llama-3.3-70b</p>
+                    </div>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="empty-state" id="chatEmpty">
+                        <i class="fas fa-robot"></i>
+                        <p>Xin chào! Tôi là TechJob AI Assistant.<br>Hãy hỏi tôi bất cứ điều gì về thị trường tuyển dụng IT Việt Nam.</p>
+                        <div class="suggestion-chips">
+                            <button onclick="sendSuggestion('Top 5 kỹ năng được tuyển nhiều nhất?')">🔥 Top kỹ năng</button>
+                            <button onclick="sendSuggestion('So sánh mức lương Backend và Frontend')">💰 So sánh lương</button>
+                            <button onclick="sendSuggestion('Văn hóa làm việc tại FPT Software như thế nào?')">🏢 Văn hóa công ty</button>
+                            <button onclick="sendSuggestion('Tìm việc liên quan đến Machine Learning')">🔍 Tìm việc AI/ML</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" placeholder="Hỏi về thị trường IT, lương, kỹ năng, công ty..." 
+                           onkeydown="if(event.key==='Enter')sendChat()">
+                    <button class="btn-send" onclick="sendChat()" id="btnSend">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Search Tab ────────────────────────────────────── -->
+        <div id="tab-search" class="tab-content">
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Tìm kiếm theo ngữ nghĩa: ví dụ 'xử lý dữ liệu lớn', 'lập trình web'..."
+                       onkeydown="if(event.key==='Enter')doSearch()">
+                <button class="btn-primary" onclick="doSearch()" style="width:auto;padding:0.8rem 1.5rem">
+                    <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+            </div>
+            <div class="job-grid" id="searchResults">
+                <div class="empty-state" style="grid-column:1/-1">
+                    <i class="fas fa-search"></i>
+                    <p>Nhập từ khóa để tìm kiếm việc làm IT bằng AI semantic search</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Salary Prediction Tab ─────────────────────────── -->
+        <div id="tab-salary" class="tab-content">
+            <div class="prediction-grid">
+                <div class="form-card">
+                    <h2><i class="fas fa-calculator"></i> Dự đoán Mức lương</h2>
+                    <div class="form-group">
+                        <label>Vị trí công việc *</label>
+                        <input type="text" id="salaryTitle" placeholder="Ví dụ: Senior Backend Developer">
+                    </div>
+                    <div class="form-group">
+                        <label>Thành phố</label>
+                        <select id="salaryCity">
+                            <option value="Hồ Chí Minh">Hồ Chí Minh</option>
+                            <option value="Hà Nội">Hà Nội</option>
+                            <option value="Đà Nẵng">Đà Nẵng</option>
+                            <option value="unknown">Khác</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Cấp bậc</label>
+                        <select id="salaryLevel">
+                            <option value="Junior">Junior</option>
+                            <option value="Middle">Middle</option>
+                            <option value="Senior" selected>Senior</option>
+                            <option value="Lead/Manager">Lead/Manager</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Hình thức làm việc</label>
+                        <select id="salaryMode">
+                            <option value="office">Office</option>
+                            <option value="remote">Remote</option>
+                            <option value="hybrid" selected>Hybrid</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Kỹ năng chính (phân cách bởi dấu phẩy)</label>
+                        <input type="text" id="salarySkills" placeholder="Python, Java, AWS, Docker">
+                    </div>
+                    <button class="btn-primary" onclick="predictSalary()" id="btnPredict">
+                        <i class="fas fa-magic"></i> Dự đoán bằng AI
+                    </button>
+                </div>
+                <div class="result-card">
+                    <h2><i class="fas fa-chart-bar"></i> Kết quả Dự đoán</h2>
+                    <div id="salaryResult">
+                        <div class="empty-state">
+                            <i class="fas fa-coins"></i>
+                            <p>Điền thông tin và nhấn "Dự đoán" để xem kết quả</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Cover Letter Tab ──────────────────────────────── -->
+        <div id="tab-cover" class="tab-content">
+            <div class="cover-letter-form">
+                <h2 style="font-size:1.1rem;font-weight:600;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.5rem">
+                    <i class="fas fa-magic"></i> Tạo Cover Letter bằng AI
+                </h2>
+                <div class="file-upload" id="fileUpload" onclick="document.getElementById('cvFile').click()">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <p>Kéo thả hoặc nhấn để tải CV (PDF)</p>
+                    <div class="filename" id="fileName"></div>
+                </div>
+                <input type="file" id="cvFile" accept=".pdf" style="display:none" onchange="handleFile(this)">
+                
+                <input type="hidden" id="coverJobId">
+                <div id="selectedJobDisplay" style="display:none">
+                    <div class="selected-job-glass">
+                        <div class="icon"><i class="fas fa-briefcase"></i></div>
+                        <div class="info">
+                            <p class="job-title" id="displayJobTitle">Chưa chọn công việc</p>
+                            <p class="company" id="displayCompany">Vui lòng chọn việc làm từ tab Tìm kiếm</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" id="fallbackJobId" style="display:none;">
+                    <label>Job ID (thủ công)</label>
+                    <input type="number" placeholder="Nhập Job ID" onchange="document.getElementById('coverJobId').value = this.value">
+                </div>
+                <div class="form-group">
+                    <label>Ngôn ngữ</label>
+                    <select id="coverLang">
+                        <option value="Tiếng Việt">Tiếng Việt</option>
+                        <option value="English">English</option>
+                    </select>
+                </div>
+                <button class="btn-primary" onclick="generateCoverLetter()" id="btnCover">
+                    <i class="fas fa-pen-fancy"></i> Tạo Cover Letter
+                </button>
+            </div>
+            <div id="coverResult"></div>
+        </div>
+    </main>
+
+    <script>
+        const API = '';  // Same origin when served from FastAPI
+
+        // ── Tab Switching ──────────────────────────────────────
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            event.target.closest('button').classList.add('active');
+        }
+
+        // ── Chat ───────────────────────────────────────────────
+        const sessionId = 'session_' + Date.now();
+
+        function sendSuggestion(text) {
+            document.getElementById('chatInput').value = text;
+            sendChat();
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            const empty = document.getElementById('chatEmpty');
+            if (empty) empty.remove();
+
+            appendMessage('user', msg);
+            input.value = '';
+
+            const btn = document.getElementById('btnSend');
+            btn.disabled = true;
+
+            const loadingId = appendLoading();
+
+            try {
+                const res = await fetch(`${API}/api/chat?message=${encodeURIComponent(msg)}&session_id=${sessionId}`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                removeLoading(loadingId);
+
+                let html = formatMarkdown(data.response || 'Không có phản hồi.');
+
+                if (data.charts && data.charts.length > 0) {
+                    for (const chart of data.charts) {
+                        html += `<img src="data:image/png;base64,${chart.image_base64}" alt="${chart.title}">`;
+                    }
+                }
+
+                appendMessage('assistant', html, data.tools_used);
+            } catch (e) {
+                removeLoading(loadingId);
+                appendMessage('assistant', `❌ Lỗi kết nối: ${e.message}`);
+            }
+
+            btn.disabled = false;
+            input.focus();
+        }
+
+        function appendMessage(role, content, tools) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            div.innerHTML = content;
+            if (tools && tools.length > 0) {
+                div.innerHTML += `<div class="tools-badge"><i class="fas fa-wrench"></i> ${tools.join(', ')}</div>`;
+            }
+            document.getElementById('chatMessages').appendChild(div);
+            div.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function appendLoading() {
+            const id = 'loading-' + Date.now();
+            const div = document.createElement('div');
+            div.className = 'message assistant';
+            div.id = id;
+            div.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div> Đang suy nghĩ...';
+            document.getElementById('chatMessages').appendChild(div);
+            div.scrollIntoView({ behavior: 'smooth' });
+            return id;
+        }
+
+        function removeLoading(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function formatMarkdown(text) {
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code style="background:rgba(99,102,241,0.15);padding:0.1rem 0.3rem;border-radius:4px;font-size:0.85em">$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // ── Semantic Search ────────────────────────────────────
+        async function doSearch() {
+            const q = document.getElementById('searchInput').value.trim();
+            if (!q) return;
+
+            const grid = document.getElementById('searchResults');
+            grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="loading-dots"><span></span><span></span><span></span></div><p>Đang tìm kiếm...</p></div>';
+
+            try {
+                const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&limit=12`);
+                const data = await res.json();
+
+                if (!data.results || data.results.length === 0) {
+                    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><i class="fas fa-search"></i><p>Không tìm thấy kết quả phù hợp</p></div>';
+                    return;
+                }
+
+                grid.innerHTML = data.results.map(job => `
+                    <div class="job-card">
+                        <div class="title">${job.title || 'N/A'}</div>
+                        <div class="company">${job.company_name || 'N/A'}</div>
+                        <div class="meta">
+                            <span class="tag"><i class="fas fa-map-marker-alt"></i> ${job.primary_city || 'N/A'}</span>
+                            <span class="tag"><i class="fas fa-money-bill"></i> ${job.salary_text || job.salary_band || 'Thương lượng'}</span>
+                        </div>
+                        <div class="similarity"><i class="fas fa-brain"></i> Độ tương đồng: ${(job.similarity * 100).toFixed(1)}%</div>
+                        <button class="btn-card" onclick="prepareCoverLetter('${job.source_id}', '${(job.title || '').replace(/'/g, "\\'")}', '${(job.company_name || '').replace(/'/g, "\\'")}')">
+                            <i class="fas fa-magic"></i> Tạo Cover Letter
+                        </button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><p>❌ Lỗi: ${e.message}</p></div>`;
+            }
+        }
+
+        // ── Salary Prediction ──────────────────────────────────
+        async function predictSalary() {
+            const title = document.getElementById('salaryTitle').value.trim();
+            if (!title) { alert('Vui lòng nhập vị trí công việc'); return; }
+
+            const btn = document.getElementById('btnPredict');
+            btn.disabled = true; btn.textContent = 'Đang dự đoán...';
+
+            const params = new URLSearchParams({
+                title,
+                city: document.getElementById('salaryCity').value,
+                level: document.getElementById('salaryLevel').value,
+                work_mode: document.getElementById('salaryMode').value,
+                skills: document.getElementById('salarySkills').value,
+            });
+
+            try {
+                const res = await fetch(`${API}/api/predict-salary?${params}`, { method: 'POST' });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    const errorMsg = data.detail ? JSON.stringify(data.detail) : (data.error || 'Lỗi hệ thống');
+                    document.getElementById('salaryResult').innerHTML = `
+                        <div class="empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--warning)"></i>
+                        <p>Lỗi tham số đầu vào: Dữ liệu quá ngắn hoặc không hợp lệ.</p></div>`;
+                    btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic"></i> Dự đoán bằng AI';
+                    return;
+                }
+
+                if (data.error) {
+                    document.getElementById('salaryResult').innerHTML = `
+                        <div class="empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--warning)"></i>
+                        <p>${data.error}</p></div>`;
+                } else {
+                    document.getElementById('salaryResult').innerHTML = `
+                        <div class="salary-result">
+                            <div class="amount">${data.predicted_min_trieu} - ${data.predicted_max_trieu} triệu</div>
+                            <div class="label">VND / tháng <span class="badge">${data.label}</span></div>
+                        </div>
+                        <div class="confidence-bar">
+                            <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+                                <span style="color:var(--text-secondary)">Độ tin cậy</span>
+                                <span style="color:var(--accent-light);font-weight:600">${(data.confidence * 100).toFixed(0)}%</span>
+                            </div>
+                            <div class="bar"><div class="fill" style="width:${data.confidence * 100}%"></div></div>
+                        </div>
+                        <div style="margin-top:1rem;font-size:0.78rem;color:var(--text-muted);text-align:center">
+                            Dữ liệu huấn luyện: ${data.model_info?.training_samples || 'N/A'} tin tuyển dụng
+                        </div>`;
+                }
+            } catch (e) {
+                document.getElementById('salaryResult').innerHTML = `
+                    <div class="empty-state"><p>❌ ${e.message}</p></div>`;
+            }
+
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic"></i> Dự đoán bằng AI';
+        }
+
+        // ── Cover Letter ───────────────────────────────────────
+        let selectedFile = null;
+
+        function handleFile(input) {
+            if (input.files.length > 0) {
+                selectedFile = input.files[0];
+                document.getElementById('fileName').textContent = selectedFile.name;
+                document.getElementById('fileUpload').classList.add('has-file');
+            }
+        }
+
+        function prepareCoverLetter(jobId, title, company) {
+            document.getElementById('coverJobId').value = jobId;
+            document.getElementById('displayJobTitle').textContent = title || 'Vị trí không xác định';
+            document.getElementById('displayCompany').textContent = company || 'Công ty không xác định';
+            document.getElementById('selectedJobDisplay').style.display = 'block';
+            
+            // Xóa kết quả cover letter cũ
+            document.getElementById('coverResult').innerHTML = '';
+            
+            // Chuyển tab và cuộn lên đầu form
+            switchTab('cover');
+            document.querySelector('.cover-letter-form').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function generateCoverLetter() {
+            if (!selectedFile) { alert('Vui lòng tải lên file CV (PDF)'); return; }
+            const jobId = document.getElementById('coverJobId').value;
+            if (!jobId) { alert('Vui lòng tìm và chọn một công việc từ tab Tìm kiếm'); switchTab('search'); return; }
+
+            const btn = document.getElementById('btnCover');
+            btn.disabled = true; btn.textContent = 'Đang tạo...';
+
+            const formData = new FormData();
+            formData.append('cv_file', selectedFile);
+            formData.append('job_id', jobId);
+            formData.append('language', document.getElementById('coverLang').value);
+
+            try {
+                const res = await fetch(`${API}/api/cover-letter`, { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    const errorMsg = data.detail ? "Tham số đầu vào không hợp lệ." : (data.error || 'Lỗi xử lý PDF hoặc lỗi máy chủ.');
+                    document.getElementById('coverResult').innerHTML = `
+                        <div class="cover-letter-output" style="color:var(--danger)">❌ ${errorMsg}</div>`;
+                    btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen-fancy"></i> Tạo Cover Letter';
+                    return;
+                }
+
+                if (data.error) {
+                    document.getElementById('coverResult').innerHTML = `
+                        <div class="cover-letter-output" style="color:var(--danger)">${data.error}</div>`;
+                } else {
+                    let html = `<div class="cover-letter-output">${data.cover_letter}`;
+                    if (data.matched_skills && data.matched_skills.length > 0) {
+                        html += `<div class="matched-skills"><strong style="font-size:0.8rem;color:var(--text-secondary);width:100%;margin-bottom:0.3rem">Kỹ năng khớp:</strong>`;
+                        html += data.matched_skills.map(s => `<span class="skill">${s}</span>`).join('');
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                    document.getElementById('coverResult').innerHTML = html;
+                }
+            } catch (e) {
+                document.getElementById('coverResult').innerHTML = `
+                    <div class="cover-letter-output" style="color:var(--danger)">❌ ${e.message}</div>`;
+            }
+
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen-fancy"></i> Tạo Cover Letter';
+        }
+    </script>
+</body>
+</html>

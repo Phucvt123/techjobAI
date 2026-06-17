@@ -2,9 +2,25 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
-from pipeline.bronze import run as bronze_run
-from pipeline.silver import run as silver_run
-from pipeline.silver_to_postgres import run as silver_to_posgre_run
+def _bronze_run(date_str):
+    from pipeline.bronze import run
+    return run(date_str=date_str)
+
+def _silver_run(date_str):
+    from pipeline.silver import run
+    return run(date_str=date_str)
+
+def _silver_to_postgres_run(date_str):
+    from pipeline.silver_to_postgres import run
+    return run(date_str=date_str)
+
+def _embedding_run():
+    from ai.embedding import run
+    return run()
+
+def _salary_train_run():
+    from ai.salary_predictor import run
+    return run()
 
 default_args = {
     "owner" : "techjobai",
@@ -23,19 +39,19 @@ with DAG(
     
     ingest_to_bronze = PythonOperator(
         task_id="ingest_to_bronze",
-        python_callable=bronze_run,
+        python_callable=_bronze_run,
         op_kwargs={"date_str": "{{ ds }}"},
     )
 
     extract_to_silver = PythonOperator(
         task_id= "extract_to_silver",
-        python_callable= silver_run,
+        python_callable= _silver_run,
         op_kwargs={"date_str": "{{ ds }}"},
     )
 
     silver_to_postgres = PythonOperator(
         task_id= "silver_to_postgres",
-        python_callable= silver_to_posgre_run,
+        python_callable= _silver_to_postgres_run,
         op_kwargs={"date_str": "{{ ds }}"},
     )
 
@@ -44,4 +60,14 @@ with DAG(
         bash_command="cd /opt/airflow/dbt_vietnamworks && /home/airflow/.local/bin/dbt build --profiles-dir .",
     )
 
-    ingest_to_bronze >> extract_to_silver >> silver_to_postgres >> dbt_build
+    generate_embeddings = PythonOperator(
+        task_id="generate_embeddings",
+        python_callable=_embedding_run,
+    )
+
+    train_salary_model = PythonOperator(
+        task_id="train_salary_model",
+        python_callable=_salary_train_run,
+    )
+
+    ingest_to_bronze >> extract_to_silver >> silver_to_postgres >> dbt_build >> generate_embeddings >> train_salary_model

@@ -1,111 +1,135 @@
 # TechJob AI - Nền tảng Thông minh về Thị trường Việc làm IT
 
 ## Giới thiệu Tổng quan (Project Overview)
+Hệ thống end-to-end thu thập, xử lý, lưu trữ, phân tích và tìm kiếm ngữ nghĩa dữ liệu tuyển dụng IT tại Việt Nam từ **VietnamWorks public API**.
 
-TechJob AI là một hệ thống nền tảng thông minh (Smart Platform) được phát triển nhằm tối ưu hóa quá trình tuyển dụng và tìm kiếm việc làm chuyên biệt trong lĩnh vực Công nghệ Thông tin (IT).
-
-Bằng việc ứng dụng Trí tuệ Nhân tạo (AI) và Khai phá Dữ liệu (Data Mining), TechJob AI giải quyết bài toán "lệch pha" giữa kỹ năng của ứng viên và yêu cầu của nhà tuyển dụng. Đồng thời, nền tảng cung cấp các báo cáo phân tích theo thời gian thực (Real-time Analytics) về xu hướng của thị trường lao động IT.
-
-Dự án được thực hiện trong khuôn khổ môn học Nhập môn Công nghệ Phần mềm (Intro2SE) tại Trường Đại học Khoa học Tự nhiên, ĐHQG-HCM.
+Hệ thống sử dụng kiến trúc **Medallion** phối hợp giữa **PySpark** (cho extraction/loading thô) và **dbt** (cho modeling/data warehouse).
 
 ---
 
-## Các chức năng chính (Core Features)
+## 🏗️ Kiến trúc Hệ thống
 
-Hệ thống được thiết kế theo kiến trúc hướng dịch vụ với các phân hệ (Modules) chuyên biệt đáp ứng nhu cầu của từng nhóm người dùng (Actors).
+### 1. Luồng dữ liệu (Data Pipeline Flow)
 
-### 1. Phân hệ Ứng viên (Candidate Module)
+```
+[VietnamWorks API]
+      │ (API Request - Async HTTPX client)
+      ▼
+[Bronze Storage (MinIO S3)]  <-- Lưu file JSON gốc phân trang
+      │
+      │ (PySpark Silver - Đọc JSON, làm sạch, loại trùng)
+      ▼
+[Silver Storage (MinIO S3)]  <-- Lưu Parquet format
+      │
+      │ (PySpark Postgres Writer)
+      ▼
+[PostgreSQL - silver.jobs]   <-- Bảng trung chuyển trung gian
+      │
+      │ (dbt Run)
+      ├───────────────────────┬────────────────────────┐
+      ▼                       ▼                        ▼
+[dim_company, dim_skill,  [fact_job]            [job_skill_bridge]
+  dim_location]               │ (Salary Normalize,     (N-N bridge)
+                              │  HTML Strip)
+                              ▼
+                        [fact_job (Postgres)]
+                              │
+                              │ (Airflow Task: ML Embedding Service)
+                              ▼
+                        [fact_job.embedding]  <-- pgvector (384-dim, HNSW index)
+                              │
+                              │ (dbt aggregates)
+                              ▼
+                        [Dashboard Cache & Aggregates]
+```
+### 2. Các lớp lưu trữ (Medallion Architecture)
 
-#### Quản lý Hồ sơ Điện tử (E-Profile Management)
-
-Hỗ trợ tạo, cập nhật CV động. Tích hợp tính năng trích xuất dữ liệu (Data Parsing) từ CV định dạng PDF/Word hoặc import từ LinkedIn.
-
-#### Khuyến nghị Việc làm Thông minh (AI-driven Job Recommendation)
-
-Ứng dụng các thuật toán Gợi ý (Recommendation System) để đề xuất công việc (Job Matching) dựa trên bộ kỹ năng (Tech Stacks), kinh nghiệm và định hướng nghề nghiệp.
-
-#### Phân tích Khung Năng lực (Skill Gap Analysis)
-
-Đối chiếu hồ sơ ứng viên với các Job Description (JD) mục tiêu, từ đó phân tích các kỹ năng còn thiếu và đề xuất lộ trình học tập (Learning Path).
-
-#### Theo dõi Trạng thái Ứng tuyển (Application Tracking)
-
-Giao diện quản lý toàn bộ vòng đời ứng tuyển:
-
-* Submitted
-* In-review
-* Interviewing
-* Offered
-
----
-
-### 2. Phân hệ Nhà tuyển dụng (Recruiter Module)
-
-#### Quản lý Tin tuyển dụng (Job Posting Management)
-
-Cung cấp các thao tác CRUD cho tin tuyển dụng, hỗ trợ gắn thẻ (Tagging) các kỹ năng yêu cầu (ví dụ: ReactJS, Python, AWS).
-
-#### Sàng lọc CV Tự động (Automated Resume Screening)
-
-Tự động phân tích ngữ nghĩa CV (Semantic Parsing) và chấm điểm mức độ phù hợp (Matching Score) giữa CV và JD.
-
-#### Hệ thống Quản lý Ứng viên (ATS - Applicant Tracking System)
-
-Trực quan hóa phễu tuyển dụng (Recruitment Funnel) qua bảng Kanban, tích hợp gửi Email tự động và xếp lịch phỏng vấn (Interview Scheduling).
-
----
-
-### 3. Phân hệ Quản trị viên (Admin Module)
-
-#### Phân quyền & Kiểm soát Truy cập (RBAC - Role-Based Access Control)
-
-Quản lý định danh tài khoản và cấp quyền cho User/Recruiter/Admin.
-
-#### Xác thực Doanh nghiệp (Business KYC)
-
-Quy trình kiểm duyệt và xác thực tính hợp pháp của các công ty đăng ký tài khoản tuyển dụng để chống Spam/Scam.
-
-#### Quản trị Nội dung (CMS)
-
-Quản lý hệ thống dữ liệu từ điển kỹ năng (Skill Taxonomy) và các bài viết nội bộ.
+| Layer | Công nghệ | Dữ liệu & Định dạng | Mục đích |
+|---|---|---|---|
+| **Bronze** | MinIO (S3) | JSON, partition `jobs/dt=YYYY-MM-DD/` | Lưu trữ dữ liệu gốc thô từ API để lưu vết và có thể chạy lại khi cần. |
+| **Silver (MinIO)** | MinIO (S3) | Parquet, partition `jobs/dt=YYYY-MM-DD/` | Dữ liệu dạng bảng sạch sẽ, loại bỏ trùng lặp `jobId`. |
+| **Silver (Postgres)** | PostgreSQL | Bảng `silver.jobs` | Bảng lưu trữ trung gian để dbt đọc dữ liệu thô sạch. |
+| **Gold (Warehouse)** | PostgreSQL | Bảng `warehouse_warehouse.fact_job` và các `dim_*` | Dữ liệu đã chuẩn hóa, làm sạch nội dung text (bỏ HTML tags), phân tách đa chiều. |
+| **Gold (Aggregates)** | PostgreSQL | Các bảng `agg_*` và `dashboard_cache` | Tổng hợp dữ liệu pre-computed cho API Dashboard. |
 
 ---
 
-### 4. Module Trí tuệ Nhân tạo & Báo cáo (AI & Analytics Module)
+## 📁 Cấu trúc Thư mục
 
-#### Bảng điều khiển Xu hướng Thị trường (Market Trend Dashboard)
-
-Trực quan hóa dữ liệu (Data Visualization) về nhu cầu nhân lực, công nghệ xu hướng (Trending Tech Stacks) và phân bố địa lý việc làm.
-
-#### Mô hình Dự báo Lương (Salary Prediction Model)
-
-Đưa ra khoảng lương ước tính (Expected Salary Range) theo thời gian thực dựa vào vị trí, số năm kinh nghiệm và biến động thị trường.
+```
+data-pipeline/
+├── .env.example                # File mẫu cấu hình biến môi trường
+├── requirements.txt            # Quản lý python dependencies (PySpark, FastAPI, etc.)
+├── docker-compose.yml          # Containerize: Airflow, Redis, MinIO, Postgres (pgvector)
+├── Dockerfile.airflow          # Custom Airflow Image (cài đặt Java, PySpark, dbt)
+│
+├── dags/                       # Airflow DAG định nghĩa lịch trình chạy hàng ngày
+│   └── vietnamworks_etl_dag.py
+│
+├── pipeline/                   # Scripts thực thi các bước ETL
+│   ├── bronze.py               # Thu thập dữ liệu API -> Bronze JSON (MinIO)
+│   ├── silver.py               # Bronze JSON -> Silver Parquet (MinIO)
+│   ├── silver_to_postgres.py   # Silver Parquet -> Postgres (silver.jobs)
+│   └── embedding.py            # Tạo vector embedding bằng SentenceTransformer
+│
+├── source/                     # Module Python tái sử dụng cho các scripts
+│   ├── vietnamworks_client.py  # HTTP client kết nối API
+│   ├── spark_session.py        # Cấu hình Spark Session
+│   ├── storage.py              # Kết nối S3 / ADLS Gen2
+│   └── setup_db.py             # Setup DDL database (pgvector, silver.jobs)
+│
+├── dbt_vietnamworks/           # Project dbt (Transform & Data Quality Tests)
+│   ├── dbt_project.yml
+│   ├── profiles.yml
+│   └── models/
+│       ├── staging/            # Ánh xạ 1-1 từ silver.jobs
+│       └── warehouse/          # Fact & Dimensions (Fact Job, Dim Skill, Dim Company, Dim Location)
+│       └── aggregates/         # Tổng hợp dữ liệu pre-computed phục vụ Dashboard
+│
+├── app/                        # FastAPI App Backend
+│   └── main.py                 # API Endpoints (phân trang job, stats, semantic search)
+│
+└── tests/                      # Pytest Suite
+    ├── conftest.py
+    └── test_api_client.py
+```
 
 ---
 
-## Đội ngũ Phát triển (Team Members)
+## 🚀 Hướng dẫn khởi chạy
 
-### Nhóm 6 - CQ 2023/22
+### 1. Chuẩn bị môi trường
+```bash
+cd data-pipeline
+cp .env.example .env
+# Điền đầy đủ thông tin credentials
+```
 
-* Võ Trần Duy Hoàng - 23120266
-* Võ Gia Huy - 23120277
-* Nguyễn Hữu Khánh Hưng - 23120271
-* Vũ Trần Phúc - 23120333
-* Trần Nguyễn Minh Quân - 23120342
+### 2. Khởi chạy Docker Compose (Airflow + MinIO + Postgres + Redis + FastAPI Backend)
+```bash
+docker compose up -d --build
+```
 
-### Giảng viên Hướng dẫn
+### 3. Setup Database (Tạo extension pgvector và bảng silver.jobs)
+```bash
+docker exec -it techjob-backend python source/setup_db.py
+```
 
-#### Giảng viên Lý thuyết
+### 4. Sử dụng API Endpoints
+FastAPI Backend chạy tại: `http://localhost:8000/docs` (Swagger UI)
 
-* TS. Trần Duy Hoàng
-
-#### Giảng viên Thực hành
-
-* ThS. Ngô Ngọc Đăng Khoa
-* ThS. Hồ Tuấn Thanh
+*   **Stats API**: `GET /api/stats`
+*   **List Jobs**: `GET /api/jobs?keyword=python&page=1&size=20`
+*   **Semantic Search (pgvector)**: `GET /api/search?q=machine+learning+python+developer`
+*   **Monthly Hiring Trends**: `GET /api/trends`
+*   **Top Skills**: `GET /api/top-skills`
 
 ---
 
-## Cài đặt & Triển khai (Setup & Deployment)
+## 📈 Tích hợp CI/CD
 
-*(Chi tiết về Tech Stack (Frontend/Backend/Database/Cloud) và hướng dẫn clone, setup môi trường (Environment Setup) sẽ được cập nhật trong giai đoạn cài đặt).*
+Quy trình tự động hóa kiểm thử được thiết lập tại `.github/workflows/ci.yml`. Nó sẽ:
+1.  Checkout code & Setup Python 3.11
+2.  Cài đặt dependencies từ `requirements.txt`
+3.  Chạy pytest để kiểm tra logic kết nối API và mapping của Spark.
+>>>>>>> ai
