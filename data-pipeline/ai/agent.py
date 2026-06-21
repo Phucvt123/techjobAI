@@ -121,19 +121,23 @@ def _make_tools():
         except ValueError:
             limit_val = 10
 
-        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        # Cache model globally to avoid reloading on every call
+        if not hasattr(semantic_search_tool, "_model"):
+            semantic_search_tool._model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        model = semantic_search_tool._model
+
         query_vec = model.encode(query).tolist()
         vec_str = "[" + ",".join(str(v) for v in query_vec) + "]"
 
         conn = _get_readonly_conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """SELECT source_id, title, company_name, primary_city,
-                      salary_text, salary_band, source_url,
-                      1 - (embedding <=> %s::vector) AS similarity
-               FROM warehouse_warehouse.fact_job
-               WHERE embedding IS NOT NULL
-               ORDER BY embedding <=> %s::vector
+            """SELECT f.source_id, f.title, f.company_name, f.primary_city,
+                      f.salary_text, f.salary_band, f.source_url,
+                      1 - (e.embedding <=> %s::vector) AS similarity
+               FROM warehouse_warehouse.fact_job f
+               JOIN warehouse_warehouse.job_embeddings e ON f.job_id = e.job_id
+               ORDER BY e.embedding <=> %s::vector
                LIMIT %s;""",
             [vec_str, vec_str, limit_val],
         )

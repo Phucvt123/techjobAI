@@ -111,8 +111,7 @@ final AS (
         job_url AS source_url,
         created_on AS posted_date,
         expired_on AS deadline,
-        ingested_at AS extracted_at,
-        CAST(NULL AS vector(384)) AS embedding
+        ingested_at AS extracted_at
     FROM salary_converted
 )
 

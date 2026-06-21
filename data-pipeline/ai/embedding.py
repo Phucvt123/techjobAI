@@ -1,12 +1,17 @@
 """
-Embedding Service: Encode job descriptions into 768-dim vectors
-using Sentence-Transformers (all-MiniLM-L6-v2).
+Embedding Pipeline (M10 Architecture) — TechJob AI
+Encode job descriptions into vectors using Sentence-Transformers
+and UPSERT into the dedicated job_embeddings table.
+
+The job_embeddings table is independent from dbt, so embeddings
+survive dbt full-refresh cycles.
 
 Usage:
-    python data-pipeline/pipeline/embedding.py
+    python ai/embedding.py
 """
 
 import os
+import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -31,8 +36,8 @@ DB_NAME = os.getenv("POSTGRES_DB", "techjob_ai")
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-BATCH_SIZE = 64  # Số job encode mỗi batch
-VECTOR_DIM = 384  # all-MiniLM-L6-v2 output 384 dimensions (not 768!)
+BATCH_SIZE = 64  # Jobs per batch
+VECTOR_DIM = 384  # all-MiniLM-L6-v2 output dimension
 
 
 # ============================================================
@@ -60,10 +65,8 @@ def prepare_text(title: str, description: str, requirements: str, skills: str) -
     if title:
         parts.append(f"Title: {title}")
 
-    # Parse skills JSON string
     if skills:
         try:
-            import json
             skill_list = json.loads(skills)
             if skill_list:
                 parts.append(f"Skills: {', '.join(skill_list)}")
@@ -85,41 +88,37 @@ def prepare_text(title: str, description: str, requirements: str, skills: str) -
 # ============================================================
 def run():
     print(f"{'=' * 60}")
-    print(f"  Embedding Pipeline — {datetime.now().isoformat()}")
+    print(f"  Embedding Pipeline (M10 Architecture) — {datetime.now().isoformat()}")
     print(f"{'=' * 60}")
 
-    # 1. Connect to DB
     engine = create_engine(DATABASE_URL)
 
-    # 2. Check if embedding column exists, create if not
+    # 1. Ensure job_embeddings table exists
     with engine.begin() as conn:
-        # Ensure pgvector extension
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-
-        # Check if column exists
-        result = conn.execute(text("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_schema = 'warehouse_warehouse'
-              AND table_name = 'fact_job'
-              AND column_name = 'embedding'
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS warehouse_warehouse;"))
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS warehouse_warehouse.job_embeddings (
+                job_id      INTEGER PRIMARY KEY,
+                embedding   vector({VECTOR_DIM}),
+                model_name  TEXT,
+                embedded_at TIMESTAMP DEFAULT NOW()
+            );
         """))
-        if result.fetchone() is None:
-            print("[INFO] Adding 'embedding' column to fact_job...")
-            conn.execute(text(f"""
-                ALTER TABLE warehouse_warehouse.fact_job
-                ADD COLUMN embedding vector({VECTOR_DIM});
-            """))
-            print("[INFO] Column added.")
-        else:
-            print("[INFO] Column 'embedding' already exists.")
+        conn.execute(text(f"""
+            CREATE INDEX IF NOT EXISTS idx_job_embeddings_hnsw
+            ON warehouse_warehouse.job_embeddings USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64);
+        """))
 
-    # 3. Fetch jobs WITHOUT embeddings (incremental)
+    # 2. Fetch jobs WITHOUT embeddings (incremental via LEFT JOIN)
     with engine.connect() as conn:
         result = conn.execute(text("""
-            SELECT job_id, title, description, requirements, source_id
-            FROM warehouse_warehouse.fact_job
-            WHERE embedding IS NULL
-            ORDER BY job_id
+            SELECT f.job_id, f.title, f.description, f.requirements, f.source_id
+            FROM warehouse_warehouse.fact_job f
+            LEFT JOIN warehouse_warehouse.job_embeddings e ON f.job_id = e.job_id
+            WHERE e.job_id IS NULL
+            ORDER BY f.job_id
         """))
         jobs = result.fetchall()
 
@@ -129,32 +128,30 @@ def run():
         print("[INFO] All jobs already have embeddings. Nothing to do.")
         return
 
-    # 4. Also fetch skills for each job
+    # 3. Also fetch skills for each job from staging
     with engine.connect() as conn:
         result = conn.execute(text("""
             SELECT f.source_id, s.skills
             FROM warehouse_staging.stg_jobs s
             JOIN warehouse_warehouse.fact_job f ON f.source_id = ('vnw_' || s.job_id::text)
-            WHERE f.embedding IS NULL
+            LEFT JOIN warehouse_warehouse.job_embeddings e ON f.job_id = e.job_id
+            WHERE e.job_id IS NULL
         """))
-        # Parse skills array to comma-separated list of skillNames
         skills_map = {}
         for row in result.fetchall():
             source_id, skills_json = row
             try:
-                import json
                 if skills_json:
-                    # In feature branch skills is JSONB array: [{"skillId": 1, "skillName": "Python"}]
                     skills_arr = json.loads(skills_json) if isinstance(skills_json, str) else skills_json
                     skill_names = [s.get("skillName", "") for s in skills_arr if isinstance(s, dict) and s.get("skillName")]
                     skills_map[source_id] = json.dumps(skill_names, ensure_ascii=False)
             except Exception:
                 skills_map[source_id] = ""
 
-    # 5. Load model
+    # 4. Load model
     model = load_model()
 
-    # 6. Process in batches
+    # 5. Process in batches and UPSERT into job_embeddings
     total_processed = 0
     total_batches = (len(jobs) + BATCH_SIZE - 1) // BATCH_SIZE
 
@@ -162,7 +159,6 @@ def run():
         batch = jobs[batch_idx:batch_idx + BATCH_SIZE]
         batch_num = batch_idx // BATCH_SIZE + 1
 
-        # Prepare texts
         texts = []
         ids = []
         for row in batch:
@@ -184,49 +180,33 @@ def run():
         # Encode
         embeddings = model.encode(texts, show_progress_bar=False, batch_size=BATCH_SIZE)
 
-        # Save to DB
+        # UPSERT to job_embeddings table
         with engine.begin() as conn:
             for job_id, embedding in zip(ids, embeddings):
                 vector_str = "[" + ",".join(str(float(x)) for x in embedding) + "]"
                 conn.execute(
                     text("""
-                        UPDATE warehouse_warehouse.fact_job
-                        SET embedding = :embedding
-                        WHERE job_id = :job_id
+                        INSERT INTO warehouse_warehouse.job_embeddings (job_id, embedding, model_name, embedded_at)
+                        VALUES (:job_id, :embedding, :model_name, NOW())
+                        ON CONFLICT (job_id) DO UPDATE
+                        SET embedding = EXCLUDED.embedding,
+                            model_name = EXCLUDED.model_name,
+                            embedded_at = NOW();
                     """),
-                    {"embedding": vector_str, "job_id": job_id}
+                    {"job_id": job_id, "embedding": vector_str, "model_name": MODEL_NAME}
                 )
 
         total_processed += len(ids)
         print(f"  Batch {batch_num}/{total_batches}: encoded {len(ids)} jobs (total: {total_processed})")
 
-    # 7. Create HNSW index for fast similarity search
-    with engine.begin() as conn:
-        # Check if index exists
-        result = conn.execute(text("""
-            SELECT indexname FROM pg_indexes
-            WHERE tablename = 'fact_job'
-              AND indexname = 'idx_fact_job_embedding_hnsw'
-        """))
-        if result.fetchone() is None:
-            print("[INFO] Creating HNSW index on embedding column...")
-            conn.execute(text(f"""
-                CREATE INDEX idx_fact_job_embedding_hnsw
-                ON warehouse_warehouse.fact_job
-                USING hnsw (embedding vector_cosine_ops)
-                WITH (m = 16, ef_construction = 64);
-            """))
-            print("[INFO] HNSW index created.")
-        else:
-            print("[INFO] HNSW index already exists.")
-
-    # 8. Verify
+    # 6. Verify
     with engine.connect() as conn:
         result = conn.execute(text("""
             SELECT
                 COUNT(*) AS total_jobs,
-                COUNT(embedding) AS jobs_with_embedding
-            FROM warehouse_warehouse.fact_job
+                COUNT(e.job_id) AS jobs_with_embedding
+            FROM warehouse_warehouse.fact_job f
+            LEFT JOIN warehouse_warehouse.job_embeddings e ON f.job_id = e.job_id
         """))
         row = result.fetchone()
         print(f"\n{'=' * 60}")
@@ -240,9 +220,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-    # Also embed culture data if the table exists
-    try:
-        from source.setup_culture_table import embed_culture
-        embed_culture()
-    except Exception as e:
-        print(f"[INFO] Culture embedding skipped: {e}")

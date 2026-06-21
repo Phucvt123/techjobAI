@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
+
 def get_conn(target="dev"):
     if target == "prod":
         return psycopg.connect(
@@ -24,8 +26,8 @@ def get_conn(target="dev"):
         sslmode=os.getenv("POSTGRES_SSLMODE", "prefer"), 
     )
 
-def setup():
-    conn = get_conn()
+def setup(target="dev"):
+    conn = get_conn(target)
     cur = conn.cursor()
 
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
@@ -70,26 +72,33 @@ def setup_embeddings(target="dev"):
     
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     
-    # Make sure data from cloud have been already
+    # Make sure warehouse schema exists
     cur.execute("CREATE SCHEMA IF NOT EXISTS warehouse_warehouse;")
 
-    # Embeddings table
-    cur.execute("""
+    # Embeddings table — dimension is configurable via EMBEDDING_DIM env var
+    # Local dev: 384 (all-MiniLM-L6-v2), Prod: 1024 (BAAI/bge-m3)
+    cur.execute(f"""
         CREATE TABLE IF NOT EXISTS warehouse_warehouse.job_embeddings (
             job_id          INTEGER PRIMARY KEY,
-            embedding       vector(1024),
+            embedding       vector({EMBEDDING_DIM}),
             model_name      TEXT NOT NULL,
             embedded_at     TIMESTAMP DEFAULT NOW()
         );
     """)
 
+    # HNSW index for fast similarity search
+    cur.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_job_embeddings_hnsw
+        ON warehouse_warehouse.job_embeddings USING hnsw (embedding vector_cosine_ops)
+        WITH (m = 16, ef_construction = 64);
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
-    print("pgvector ON + warehouse_warehouse.job_embeddings ready")
+    print(f"pgvector ON + warehouse_warehouse.job_embeddings ready (dim={EMBEDDING_DIM})")
 
 if __name__ == "__main__":
-    # setup()
-
     target = sys.argv[1] if len(sys.argv) > 1 else "dev"
+    setup(target)
     setup_embeddings(target)
