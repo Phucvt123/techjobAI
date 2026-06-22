@@ -1,11 +1,10 @@
 import psycopg
-import sys 
 import os 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
+EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
 
 def get_conn(target="dev"):
     if target == "prod":
@@ -26,11 +25,10 @@ def get_conn(target="dev"):
         sslmode=os.getenv("POSTGRES_SSLMODE", "prefer"), 
     )
 
-def setup(target="dev"):
-    conn = get_conn(target)
+def setup():
+    conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     cur.execute("CREATE SCHEMA IF NOT EXISTS silver;")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS silver.jobs (
@@ -41,12 +39,6 @@ def setup(target="dev"):
             salary_min        INTEGER,
             salary_max        INTEGER,
             is_salary_visible BOOLEAN,
-            pretty_salary     TEXT,
-            salary_currency   TEXT,
-            company_logo      TEXT,
-            job_url           TEXT,
-            job_level         TEXT,
-            job_level_vi      TEXT,
             job_level_id      INTEGER,
             type_working_id   INTEGER,
             created_on        TIMESTAMP,
@@ -66,39 +58,5 @@ def setup(target="dev"):
     conn.close()
     print("Schema silver and table silver.jobs is ready.")
 
-def setup_embeddings(target="dev"):
-    conn = get_conn(target)
-    cur = conn.cursor()
-    
-    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-    
-    # Make sure warehouse schema exists
-    cur.execute("CREATE SCHEMA IF NOT EXISTS warehouse_warehouse;")
-
-    # Embeddings table — dimension is configurable via EMBEDDING_DIM env var
-    # Local dev: 384 (all-MiniLM-L6-v2), Prod: 1024 (BAAI/bge-m3)
-    cur.execute(f"""
-        CREATE TABLE IF NOT EXISTS warehouse_warehouse.job_embeddings (
-            job_id          INTEGER PRIMARY KEY,
-            embedding       vector({EMBEDDING_DIM}),
-            model_name      TEXT NOT NULL,
-            embedded_at     TIMESTAMP DEFAULT NOW()
-        );
-    """)
-
-    # HNSW index for fast similarity search
-    cur.execute(f"""
-        CREATE INDEX IF NOT EXISTS idx_job_embeddings_hnsw
-        ON warehouse_warehouse.job_embeddings USING hnsw (embedding vector_cosine_ops)
-        WITH (m = 16, ef_construction = 64);
-    """)
-
-    conn.commit()
-    cur.close()
-    conn.close()
-    print(f"pgvector ON + warehouse_warehouse.job_embeddings ready (dim={EMBEDDING_DIM})")
-
 if __name__ == "__main__":
-    target = sys.argv[1] if len(sys.argv) > 1 else "dev"
-    setup(target)
-    setup_embeddings(target)
+    setup()

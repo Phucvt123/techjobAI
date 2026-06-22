@@ -25,6 +25,7 @@ DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_USER = os.getenv("POSTGRES_USER", "techjob")
 DB_PASS = os.getenv("POSTGRES_PASSWORD", "techjob123")
 DB_NAME = os.getenv("POSTGRES_DB", "techjob_ai")
+DB_SSLMODE = os.getenv("PGSSLMODE", "prefer")
 
 # Model for semantic search (cached globally)
 _search_model = None
@@ -32,14 +33,14 @@ _search_model = None
 def get_model():
     global _search_model
     if _search_model is None:
-        _search_model = SentenceTransformer("BAAI/bge-m3")
+        _search_model = SentenceTransformer("all-MiniLM-L6-v2")
     return _search_model
 
 def get_conn():
     return psycopg2.connect(
         host=DB_HOST, port=int(DB_PORT),
         user=DB_USER, password=DB_PASS,
-        dbname=DB_NAME
+        dbname=DB_NAME, sslmode=DB_SSLMODE
     )
 
 # ============================================================
@@ -164,7 +165,8 @@ def semantic_search(
 ):
     """Semantic search using pgvector cosine similarity via job_embeddings table (M10)."""
     m = get_model()
-    query_vec = m.encode(q).tolist()
+    # Normalize embeddings is REQUIRED for valid cosine distance search using <=> in pgvector
+    query_vec = m.encode(q, normalize_embeddings=True).tolist()
     vec_str = "[" + ",".join(str(v) for v in query_vec) + "]"
 
     conn = get_conn()
@@ -263,3 +265,85 @@ def train_salary_model():
         "r2_max": result["r2_max"],
         "trained_at": result["trained_at"],
     }
+
+
+@app.post("/api/build-embeddings")
+def build_embeddings(batch_size: int = Query(8, ge=1, le=64)):
+    """Build embeddings for jobs missing from job_embeddings table.
+    Reuses the model already loaded in memory — no extra RAM needed."""
+    model = get_model()
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Ensure table exists
+    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS warehouse_warehouse.job_embeddings (
+            job_id      INTEGER PRIMARY KEY,
+            embedding   vector(384),
+            model_name  TEXT,
+            embedded_at TIMESTAMP DEFAULT NOW()
+        );
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_job_embeddings_hnsw
+        ON warehouse_warehouse.job_embeddings USING hnsw (embedding vector_cosine_ops)
+        WITH (m = 16, ef_construction = 64);
+    """)
+    conn.commit()
+
+    # Fetch jobs without embeddings
+    cur.execute("""
+        SELECT f.job_id, f.title, f.description, f.requirements
+        FROM warehouse_warehouse.fact_job f
+        LEFT JOIN warehouse_warehouse.job_embeddings e ON f.job_id = e.job_id
+        WHERE e.job_id IS NULL
+        ORDER BY f.job_id
+    """)
+    jobs = cur.fetchall()
+
+    if not jobs:
+        cur.close()
+        conn.close()
+        return {"status": "ok", "message": "All jobs already have embeddings", "processed": 0}
+
+    total = 0
+    for i in range(0, len(jobs), batch_size):
+        batch = jobs[i:i + batch_size]
+        texts = []
+        ids = []
+        for job_id, title, desc, req in batch:
+            parts = []
+            if title:
+                parts.append(f"Title: {title}")
+            if desc:
+                parts.append(f"Description: {desc[:500]}")
+            if req:
+                parts.append(f"Requirements: {req[:300]}")
+            text = " | ".join(parts) if parts else ""
+            if text:
+                texts.append(text)
+                ids.append(job_id)
+
+        if not texts:
+            continue
+
+        embeddings = model.encode(texts, show_progress_bar=False, batch_size=batch_size)
+
+        for job_id, emb in zip(ids, embeddings):
+            vec_str = "[" + ",".join(str(float(x)) for x in emb) + "]"
+            cur.execute(
+                """INSERT INTO warehouse_warehouse.job_embeddings (job_id, embedding, model_name, embedded_at)
+                   VALUES (%s, %s::vector, %s, NOW())
+                   ON CONFLICT (job_id) DO UPDATE
+                   SET embedding = EXCLUDED.embedding, model_name = EXCLUDED.model_name, embedded_at = NOW();""",
+                [job_id, vec_str, "all-MiniLM-L6-v2"]
+            )
+        conn.commit()
+        total += len(ids)
+
+    cur.close()
+    conn.close()
+    return {"status": "ok", "processed": total, "total_jobs": len(jobs)}
+
