@@ -20,7 +20,14 @@ import io
 from pathlib import Path
 from datetime import datetime
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*_args, **_kwargs):
+        return False
+
+from ai.observability import timed_ai_event
+from ai.skills import load_skills, render_full_skills, render_skill_index
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -69,6 +76,25 @@ Bảng thống kê:
 5. Đơn vị lương: triệu VND/tháng (chia salary_min_vnd hoặc salary_max_vnd cho 1000000)
 6. Hãy chủ động phân tích và đưa ra nhận xét chuyên sâu, không chỉ liệt kê số liệu
 """
+
+
+def build_system_prompt() -> str:
+    """Build the agent prompt with project skill playbooks."""
+    skills = load_skills()
+    if not skills:
+        return SYSTEM_PROMPT
+
+    return (
+        SYSTEM_PROMPT
+        + "\n\n## PROJECT SKILLS\n"
+        + "You have access to these project skill playbooks. "
+        + "When a user request matches a skill, follow that skill's workflow, "
+        + "response format, and guardrails.\n\n"
+        + "### Available skills\n"
+        + render_skill_index(skills)
+        + "\n\n### Skill playbooks\n"
+        + render_full_skills(skills)
+    )
 
 
 # ============================================================
@@ -274,7 +300,7 @@ def _get_agent():
     _agent_executor = create_react_agent(
         llm,
         tools,
-        prompt=SYSTEM_PROMPT,
+        prompt=build_system_prompt(),
     )
 
     return _agent_executor
@@ -296,55 +322,63 @@ async def chat(message: str, session_id: str = "default") -> dict:
         dict with 'response' (text), 'charts' (list of base64 images),
         'tools_used' (list of tool names called).
     """
-    agent = _get_agent()
+    with timed_ai_event("chat", session_id=session_id, message_chars=len(message)) as event:
+        agent = _get_agent()
 
-    # Build messages with history
-    if session_id not in _chat_histories:
-        _chat_histories[session_id] = []
+        # Build messages with history
+        if session_id not in _chat_histories:
+            _chat_histories[session_id] = []
 
-    history = _chat_histories[session_id]
+        history = _chat_histories[session_id]
 
-    messages = []
-    for msg in history[-MAX_HISTORY:]:
-        messages.append(msg)
-    messages.append({"role": "user", "content": message})
+        messages = []
+        for msg in history[-MAX_HISTORY:]:
+            messages.append(msg)
+        messages.append({"role": "user", "content": message})
 
-    # Invoke agent
-    result = await agent.ainvoke({"messages": messages})
+        # Invoke agent
+        result = await agent.ainvoke({"messages": messages})
 
-    # Extract response
-    response_text = ""
-    charts = []
-    tools_used = []
+        # Extract response
+        response_text = ""
+        charts = []
+        tools_used = []
 
-    for msg in result["messages"]:
-        if hasattr(msg, "type"):
-            if msg.type == "ai" and hasattr(msg, "content") and msg.content:
-                response_text = msg.content
-            elif msg.type == "tool" and hasattr(msg, "content"):
-                try:
-                    tool_result = json.loads(msg.content)
-                    if isinstance(tool_result, dict) and "image_base64" in tool_result:
-                        charts.append(tool_result)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-            if msg.type == "ai" and hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    tools_used.append(tc["name"])
+        for msg in result["messages"]:
+            if hasattr(msg, "type"):
+                if msg.type == "ai" and hasattr(msg, "content") and msg.content:
+                    response_text = msg.content
+                elif msg.type == "tool" and hasattr(msg, "content"):
+                    try:
+                        tool_result = json.loads(msg.content)
+                        if isinstance(tool_result, dict) and "image_base64" in tool_result:
+                            charts.append(tool_result)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if msg.type == "ai" and hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tools_used.append(tc["name"])
 
-    # Save to history
-    history.append({"role": "user", "content": message})
-    history.append({"role": "assistant", "content": response_text})
+        if not response_text:
+            response_text = "Tôi chưa tạo được câu trả lời từ agent. Vui lòng thử lại với câu hỏi cụ thể hơn."
 
-    if len(history) > MAX_HISTORY * 2:
-        _chat_histories[session_id] = history[-MAX_HISTORY * 2:]
+        # Save to history
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": response_text})
 
-    return {
-        "response": response_text,
-        "charts": charts,
-        "tools_used": tools_used,
-        "session_id": session_id,
-    }
+        if len(history) > MAX_HISTORY * 2:
+            _chat_histories[session_id] = history[-MAX_HISTORY * 2:]
+
+        event["tools_used"] = ",".join(sorted(set(tools_used))) if tools_used else "-"
+        event["response_chars"] = len(response_text)
+        event["charts"] = len(charts)
+
+        return {
+            "response": response_text,
+            "charts": charts,
+            "tools_used": tools_used,
+            "session_id": session_id,
+        }
 
 
 def get_chat_history(session_id: str) -> list:

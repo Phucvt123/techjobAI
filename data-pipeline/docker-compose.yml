@@ -186,6 +186,32 @@ services:
       postgres-project:
         condition: service_healthy
 
+  # TechJob AI MCP server (stdio). Useful for external LLM clients that support MCP.
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: techjob-mcp-server
+    entrypoint: ["/usr/bin/dumb-init", "--", "python"]
+    command: -m be.mcp_server
+    stdin_open: true
+    tty: true
+    environment:
+      POSTGRES_HOST: ep-odd-feather-aok9wn0q.c-2.ap-southeast-1.aws.neon.tech
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: neondb
+      POSTGRES_USER: machine_learning_readonly
+      POSTGRES_PASSWORD: machine_learning
+      PGSSLMODE: require
+      PYTHONPATH: /opt/airflow
+    volumes:
+      - ./be:/opt/airflow/be
+      - ./ai:/opt/airflow/ai
+      - ./.env:/opt/airflow/.env
+    depends_on:
+      postgres-project:
+        condition: service_healthy
+
   metabase:
     image: metabase/metabase:latest
     container_name: metabase

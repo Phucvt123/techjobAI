@@ -27,6 +27,8 @@ export async function sendChatMessage(text, _history = []) {
         content: data.response,
         jobCards: [],
         showChart: data.tools_used && data.tools_used.includes('generate_chart_tool'),
+        toolsUsed: data.tools_used || [],
+        charts: data.charts || [],
       }
     } catch (err) {
       console.error('Chat backend error:', err)
@@ -34,7 +36,8 @@ export async function sendChatMessage(text, _history = []) {
         type: 'text',
         content: 'Xin lỗi, tôi đang gặp sự cố khi kết nối tới hệ thống AI.',
         jobCards: [],
-        showChart: false
+        showChart: false,
+        error: true
       }
     }
   }

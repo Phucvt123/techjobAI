@@ -114,6 +114,15 @@ function MessageBubble({ msg, onAction }) {
             </div>
           )}
 
+          {/* Tools used */}
+          {msg.toolsUsed?.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {msg.toolsUsed.map(tool => (
+                <AIBadge key={tool} variant="gray">Tool: {tool}</AIBadge>
+              ))}
+            </div>
+          )}
+
           {/* Follow-up */}
           {msg.followUp && (
             <p className="mt-3 text-sm text-text-secondary">{msg.followUp}</p>
@@ -194,6 +203,9 @@ export default function Chat() {
         throw new Error('AI backend unreachable (simulated)')
       }
       aiResp = await sendChatMessage(content, messages)
+      if (aiResp?.error) {
+        throw new Error('AI backend returned an error response')
+      }
       if (isCoverLetterIntent(content)) {
         aiResp = attachCoverLetterCta(aiResp)
       }

@@ -4,7 +4,7 @@ Serves job data, analytics, semantic search, AI agent chat,
 salary prediction, and cover letter generation from PostgreSQL + pgvector.
 """
 
-from fastapi import FastAPI, Query, UploadFile, File, Form
+from fastapi import FastAPI, Query, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
+from ai.observability import log_ai_event, timed_ai_event
 
 # Load env from data-pipeline/.env
 ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
@@ -72,6 +73,57 @@ if STATIC_DIR.exists():
 def root():
     """Redirect to frontend UI."""
     return RedirectResponse(url="/static/index.html")
+
+
+@app.get("/api/health/ai")
+def ai_health():
+    """Lightweight AI system health without calling the LLM or database."""
+    from ai.skills import load_skills
+    from be.mcp_server import get_tool_definitions
+
+    return {
+        "status": "ok",
+        "groq_configured": bool(GROQ_API_KEY),
+        "model": GROQ_MODEL,
+        "embedding_model": "all-MiniLM-L6-v2",
+        "skills_count": len(load_skills()),
+        "mcp_tools": [tool["name"] for tool in get_tool_definitions()],
+    }
+
+
+@app.get("/api/health/schema")
+def schema_health():
+    """Check whether key warehouse objects are reachable."""
+    required_tables = [
+        "warehouse_warehouse.fact_job_postings",
+        "warehouse_warehouse.dim_company",
+        "warehouse_warehouse.job_embeddings",
+        "warehouse_marts.mart_skill_demand",
+        "warehouse_marts.mart_salary_benchmark",
+    ]
+
+    conn = get_conn()
+    cur = conn.cursor()
+    results = {}
+    for table in required_tables:
+        schema_name, table_name = table.split(".", 1)
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = %s AND table_name = %s
+            )
+            """,
+            [schema_name, table_name],
+        )
+        results[table] = bool(cur.fetchone()[0])
+    cur.close()
+    conn.close()
+
+    return {
+        "status": "ok" if all(results.values()) else "degraded",
+        "tables": results,
+    }
 
 
 @app.get("/api/stats")
@@ -250,9 +302,26 @@ async def agent_chat(
     session_id: str = Query("default", max_length=100),
 ):
     """Chat with TechJob AI Agent (ReAct Agent powered by Groq LLaMA)."""
-    from ai.agent import chat as agent_chat_fn
-    result = await agent_chat_fn(message, session_id)
-    return result
+    with timed_ai_event("api.chat", session_id=session_id, message_chars=len(message)):
+        try:
+            from ai.agent import chat as agent_chat_fn
+            result = await agent_chat_fn(message, session_id)
+            return {"ok": True, **result}
+        except Exception as exc:
+            log_ai_event(
+                "api.chat.failed",
+                session_id=session_id,
+                error_type=type(exc).__name__,
+                error=str(exc)[:300],
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "ok": False,
+                    "error": "AI_CHAT_UNAVAILABLE",
+                    "message": "AI chat is temporarily unavailable. Please try again later.",
+                },
+            ) from exc
 
 
 @app.get("/api/chat/history/{session_id}")
@@ -322,7 +391,7 @@ async def generate_cover_letter_endpoint(
     language: str = Form("Tiếng Việt", description="Output language"),
 ):
     """Generate a personalized cover letter from CV (PDF) + Job Description."""
-    from ai.cover_letter import generate_cover_letter_from_job_id, generate_cover_letter, parse_cv_pdf
+    from ai.cover_letter import generate_cover_letter, parse_cv_pdf, detect_cv_language
     cv_bytes = await cv_file.read()
     
     # Handle the mock UI CV gracefully
@@ -334,6 +403,15 @@ async def generate_cover_letter_endpoint(
         except Exception as e:
             return {"error": f"Lỗi đọc file PDF: {str(e)}"}
             
+    detected_language = detect_cv_language(cv_text)
+    log_ai_event(
+        "api.cover_letter.cv_parsed",
+        detected_language=detected_language,
+        cv_chars=len(cv_text),
+        job_id=job_id,
+        filename=cv_file.filename,
+    )
+
     if job_description and len(job_description.strip()) > 10:
         return generate_cover_letter(cv_text, job_description, job_title, company_name, language)
 

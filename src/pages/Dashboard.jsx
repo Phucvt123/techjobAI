@@ -17,7 +17,7 @@ const SKILL_BAR_COLOR = '#818CF8'
 // ─── Chart Card ──────────────────────────────────────────────────────────────
 function ChartCard({ title, children, loading, className = '' }) {
   return (
-    <Card className={`p-5 flex flex-col gap-4 ${className}`}>
+    <Card className={`p-5 flex flex-col gap-4 overflow-hidden ${className}`}>
       <h3 className="text-base font-semibold text-text-primary">{title}</h3>
       {loading ? (
         <div className="space-y-2">
@@ -105,16 +105,28 @@ export default function Dashboard() {
 
       setSkills(skRes.data.data || [])
 
-      // Process trends: pivot {month, skill_name, job_count} → [{month, Skill1, Skill2, ...}]
+      // Process trends: keep only top 5 skills by total demand, then pivot
+      // {month, skill_name, job_count} → [{month, Skill1, Skill2, ...}]
       const rawTrends = tRes.data.data || []
+      const totalsBySkill = rawTrends.reduce((acc, r) => {
+        acc[r.skill_name] = (acc[r.skill_name] || 0) + Number(r.job_count || 0)
+        return acc
+      }, {})
+      const topTrendSkills = Object.entries(totalsBySkill)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([skillName]) => skillName)
+      const topTrendSkillSet = new Set(topTrendSkills)
       const monthMap = {}
-      const skillNames = new Set()
       rawTrends.forEach(r => {
-        skillNames.add(r.skill_name)
+        if (!topTrendSkillSet.has(r.skill_name)) return
         if (!monthMap[r.month]) monthMap[r.month] = { month: r.month }
         monthMap[r.month][r.skill_name] = r.job_count
       })
-      setTrends({ data: Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month)), skills: [...skillNames] })
+      setTrends({
+        data: Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month)),
+        skills: topTrendSkills,
+      })
     } catch (err) {
       console.error('Dashboard fetch error:', err)
     } finally {
@@ -248,8 +260,11 @@ export default function Dashboard() {
                 />
                 <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} tickLine={false} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Legend iconType="circle" iconSize={8}
-                  wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: 11, paddingTop: 8, maxHeight: 42, overflow: 'hidden' }}
+                />
                 {trends.skills?.map((skill, i) => (
                   <Line key={skill} type="monotone" dataKey={skill} name={skill}
                     stroke={TREND_COLORS[i % TREND_COLORS.length]}
