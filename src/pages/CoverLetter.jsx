@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Upload, Copy, Download, RefreshCw, FileText, Check, Sparkles } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { MOCK_JOBS } from '../data/mockData'
 import { AIBadge, Button, Skeleton } from '../components/ui'
+import { api } from '../services/api'
 
 // ─── Mock cover letter generator ─────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
 function generateCoverLetter(jobTitle, company, skills) {
   const skillList = skills?.join(', ') || 'React, TypeScript, Node.js'
   return `Hà Nội, ngày ${new Date().toLocaleDateString('vi-VN', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -31,7 +33,18 @@ nguyenvana@example.com | +84 123 456 789`
 }
 
 // ─── CV placeholder panel ─────────────────────────────────────────────────────
-function CVPanel({ hasCV, jobId, onUpload, cvName }) {
+function CVPanel({ hasCV, jobId, onUpload, cvName, cvFile }) {
+  const fileInputRef = useRef(null)
+  const [pdfUrl, setPdfUrl] = useState(null)
+
+  useEffect(() => {
+    if (cvFile) {
+      const url = URL.createObjectURL(cvFile)
+      setPdfUrl(url)
+      return () => URL.revokeObjectURL(url)
+    }
+  }, [cvFile])
+
   const job = MOCK_JOBS.find(j => j.id === jobId)
 
   if (!hasCV) {
@@ -44,17 +57,22 @@ function CVPanel({ hasCV, jobId, onUpload, cvName }) {
         <p className="text-sm text-text-secondary mb-5 max-w-xs">
           Upload file PDF để AI phân tích và tạo cover letter phù hợp với job bạn đang apply.
         </p>
-        <label className="cursor-pointer">
-          <Button variant="primary">
+        <div className="cursor-pointer">
+          <Button variant="primary" onClick={() => fileInputRef.current?.click()}>
             <Upload size={13} /> Chọn file PDF
           </Button>
           <input
+            ref={fileInputRef}
             type="file"
             accept=".pdf"
             className="hidden"
-            onChange={e => e.target.files?.[0] && onUpload(e.target.files[0])}
+            onChange={e => {
+              if (e.target.files?.[0]) onUpload(e.target.files[0])
+              // Reset input so the same file can be selected again if needed
+              e.target.value = ''
+            }}
           />
-        </label>
+        </div>
         <p className="text-xs text-text-muted mt-3">Tối đa 10MB • Chỉ nhận file .pdf</p>
       </div>
     )
@@ -68,25 +86,13 @@ function CVPanel({ hasCV, jobId, onUpload, cvName }) {
         <span className="text-xs font-medium text-text-primary truncate">{cvName}</span>
       </div>
 
-      {/* Fake PDF preview */}
+      {/* Real PDF preview */}
       <div className="flex-1 bg-white border border-gray-200 rounded-lg overflow-hidden mb-3">
-        <div className="h-full p-4 space-y-2 overflow-y-auto">
-          <div className="text-center mb-3">
-            <p className="text-sm font-bold text-text-primary">NGUYỄN VĂN A</p>
-            <p className="text-xs text-text-secondary">Senior Frontend Developer</p>
-            <p className="text-2xs text-text-muted">nguyenvana@example.com • +84 123 456 789 • TP.HCM</p>
-          </div>
-          {['SUMMARY', 'EXPERIENCE', 'SKILLS', 'EDUCATION'].map(s => (
-            <div key={s}>
-              <p className="text-xs font-bold text-text-primary border-b border-gray-200 pb-0.5 mb-1">{s}</p>
-              <div className="space-y-1">
-                <div className="skeleton h-2.5 w-full" />
-                <div className="skeleton h-2.5 w-5/6" />
-                <div className="skeleton h-2.5 w-4/6" />
-              </div>
-            </div>
-          ))}
-        </div>
+        {pdfUrl ? (
+          <iframe src={pdfUrl} className="w-full h-full border-0" title="CV Preview" />
+        ) : (
+          <div className="flex items-center justify-center h-full text-text-muted text-xs">Không thể hiển thị PDF</div>
+        )}
       </div>
 
       <label className="text-xs text-violet hover:underline text-left cursor-pointer">
@@ -119,46 +125,86 @@ export default function CoverLetter() {
   const jobId             = searchParams.get('jobId')
   const job               = jobs.find(j => j.id === jobId)
 
-  const [hasCV, setHasCV]           = useState(true)
-  const [cvName, setCvName]         = useState('Nguyen_Van_A_CV_2025.pdf')
+  const [hasCV, setHasCV]           = useState(false)
+  const [cvName, setCvName]         = useState('')
+  const [cvFile, setCvFile]         = useState(null)
   const [generating, setGenerating] = useState(false)
-  const [content, setContent]       = useState('')
+  const [content, setContent]       = useState('Vui lòng tải CV của bạn lên ở khung bên trái để AI có thể phân tích thông tin và viết Cover Letter phù hợp nhất cho vị trí này.')
   const [copied, setCopied]         = useState(false)
   const [generated, setGenerated]   = useState(false)
 
   const handleUploadCV = (file) => {
     setCvName(file.name)
+    setCvFile(file)
     setHasCV(true)
   }
 
   // Auto-generate on first load if job is known
   useEffect(() => {
-    if (job && !generated) {
-      handleGenerate()
+    if (jobId && job && !generated && hasCV) {
+      // We don't auto-generate mock letter anymore to avoid confusion
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job])
+  }, [jobId, job, generated, hasCV])
 
   const handleGenerate = async () => {
+    if (!jobId) {
+      alert('Vui lòng chọn việc làm trước khi tạo Cover Letter!')
+      return
+    }
     setGenerating(true)
     setContent('')
-    await new Promise(r => setTimeout(r, 1200))
-    const text = generateCoverLetter(
-      job?.title || 'Senior Developer',
-      job?.company || 'TechCorp Vietnam',
-      job?.requiredSkills || job?.skills
-    )
 
-    // Simulate streaming
-    const words = text.split(' ')
-    let out = ''
-    for (let i = 0; i < words.length; i++) {
-      await new Promise(r => setTimeout(r, 10))
-      out += (i === 0 ? '' : ' ') + words[i]
-      setContent(out)
+    try {
+      const formData = new FormData()
+      formData.append('job_id', jobId)
+      formData.append('job_title', job?.title || 'Chưa rõ')
+      formData.append('company_name', job?.company || 'Công ty')
+      
+      // Pass description or requirements so backend doesn't need to find mock jobs in DB
+      const desc = job?.description || ''
+      const req = job?.requirements || job?.requiredSkills?.join(', ') || ''
+      formData.append('job_description', desc + '\n' + req)
+      
+      // Backend detects CV language from parsed PDF text and generates the
+      // cover letter in that same language.
+      formData.append('language', 'Auto')
+
+      if (cvFile) {
+        formData.append('cv_file', cvFile)
+      } else {
+        // Create dummy pdf to pass backend validation if user didn't upload
+        const dummyPdf = new Blob(['Dummy CV content'], { type: 'application/pdf' })
+        formData.append('cv_file', dummyPdf, 'dummy.pdf')
+      }
+
+      const res = await api.post('/cover-letter', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000 // allow 60 seconds for AI processing
+      })
+
+      if (res.data.error) {
+        setContent('Đã xảy ra lỗi: ' + res.data.error)
+        setGenerating(false)
+        return
+      }
+
+      const finalContent = res.data.cover_letter || 'Không có kết quả trả về.'
+      
+      // Simulate fast streaming
+      const words = finalContent.split(' ')
+      let out = ''
+      for (let i = 0; i < words.length; i++) {
+        await new Promise(r => setTimeout(r, 5)) // 5ms per word
+        out += (i === 0 ? '' : ' ') + words[i]
+        setContent(out)
+      }
+    } catch (err) {
+      console.error(err)
+      setContent('Đã xảy ra lỗi khi tạo Cover Letter: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setGenerating(false)
+      setGenerated(true)
     }
-    setGenerating(false)
-    setGenerated(true)
   }
 
   const handleCopy = () => {
@@ -200,7 +246,7 @@ export default function CoverLetter() {
             <p className="text-xs font-semibold text-text-secondary">CV của bạn</p>
           </div>
           <div className="flex-1 overflow-hidden">
-            <CVPanel hasCV={hasCV} jobId={jobId} onUpload={handleUploadCV} cvName={cvName} />
+            <CVPanel hasCV={hasCV} jobId={jobId} onUpload={handleUploadCV} cvName={cvName} cvFile={cvFile} />
           </div>
         </div>
 
@@ -231,7 +277,7 @@ export default function CoverLetter() {
                            focus:outline-none font-mono"
                 value={content}
                 onChange={e => setContent(e.target.value)}
-                placeholder="Cover letter sẽ xuất hiện ở đây sau khi AI tạo xong..."
+                placeholder={jobId ? "Cover letter sẽ xuất hiện ở đây sau khi AI tạo xong..." : "👈 Vui lòng ấn 'Chọn việc làm' (ở góc trên bên phải) trước khi tạo Cover Letter!"}
                 style={{ fontFamily: 'Inter, sans-serif' }}
               />
             )}
@@ -253,11 +299,10 @@ export default function CoverLetter() {
             >
               <Download size={13} /> Tải TXT
             </Button>
-            <div className="flex-1" />
             <Button
               variant="mint" size="sm"
               onClick={handleGenerate}
-              disabled={generating}
+              disabled={generating || !jobId || !hasCV}
             >
               {generating
                 ? <><RefreshCw size={13} className="animate-spin" /> Đang tạo...</>

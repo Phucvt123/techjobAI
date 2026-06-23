@@ -61,7 +61,7 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 // ─── Donut label ─────────────────────────────────────────────────────────────
-function renderDonutLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) {
+function renderDonutLabel({ cx, cy, midAngle, outerRadius, percent, name }) {
   const RADIAN = Math.PI / 180
   const radius = outerRadius + 20
   const x = cx + radius * Math.cos(-midAngle * RADIAN)
@@ -164,7 +164,7 @@ export default function Dashboard() {
                 tick={{ fontSize: 12, fill: '#6B7280' }} tickLine={false} axisLine={false} width={140} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: '#F8F7FF' }} />
               <Bar dataKey="job_count" name="Jobs Count" radius={[0, 4, 4, 0]} maxBarSize={20}
-                label={{ position: 'right', fontSize: 11, fill: '#374151', formatter: v => v.toLocaleString() }}>
+                label={{ position: 'right', fontSize: 11, fill: '#374151', formatter: v => v?.toLocaleString() || '' }}>
                 {levels.map((_, i) => (
                   <Cell key={i} fill={LEVEL_COLORS[i % LEVEL_COLORS.length]} />
                 ))}
@@ -226,7 +226,7 @@ export default function Dashboard() {
               <Tooltip content={<ChartTooltip />} cursor={{ fill: '#F8F7FF' }} />
               <Bar dataKey="total_jobs" name="Total Jobs" fill={SKILL_BAR_COLOR}
                 radius={[0, 4, 4, 0]} maxBarSize={16}
-                label={{ position: 'right', fontSize: 10, fill: '#374151', formatter: v => v.toLocaleString() }} />
+                label={{ position: 'right', fontSize: 10, fill: '#374151', formatter: v => v?.toLocaleString() || '' }} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>

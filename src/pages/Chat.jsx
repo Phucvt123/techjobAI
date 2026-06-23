@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Send, MoreVertical, CheckCircle, Bot, BarChart3, Download, AlertTriangle } from 'lucide-react'
+import { Send, MoreVertical, CheckCircle, Bot, BarChart3, Download, AlertTriangle, FileText } from 'lucide-react'
 import clsx from 'clsx'
 import { MiniJobCard } from '../components/JobCard'
 import { AIBadge, TypingIndicator, Button } from '../components/ui'
@@ -46,7 +46,30 @@ function InlineSkillChart({ data }) {
 // ─── End of inline chart component ───────────────────────────────────────────
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg }) {
+function isCoverLetterIntent(text) {
+  const normalized = text.toLowerCase()
+  return (
+    normalized.includes('cover letter') ||
+    normalized.includes('thư xin việc') ||
+    normalized.includes('thư ứng tuyển') ||
+    normalized.includes('cv')
+  )
+}
+
+function attachCoverLetterCta(response) {
+  return {
+    ...response,
+    action: {
+      label: 'Mở trang Upload CV',
+      to: '/cover-letter',
+      icon: 'file',
+      variant: 'mint',
+      hint: 'Upload CV ở trang Write Cover Letter, chọn job đang apply, rồi bấm “Tạo lại với AI”.',
+    },
+  }
+}
+
+function MessageBubble({ msg, onAction }) {
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end animate-fade-in">
@@ -94,6 +117,23 @@ function MessageBubble({ msg }) {
           {/* Follow-up */}
           {msg.followUp && (
             <p className="mt-3 text-sm text-text-secondary">{msg.followUp}</p>
+          )}
+
+          {/* Action CTA */}
+          {msg.action && (
+            <div className="mt-3">
+              <Button
+                variant={msg.action.variant || 'primary'}
+                size="sm"
+                onClick={() => onAction?.(msg.action)}
+              >
+                {msg.action.icon === 'file' && <FileText size={13} />}
+                {msg.action.label}
+              </Button>
+              {msg.action.hint && (
+                <p className="text-xs text-text-muted mt-2">{msg.action.hint}</p>
+              )}
+            </div>
           )}
         </div>
 
@@ -154,6 +194,9 @@ export default function Chat() {
         throw new Error('AI backend unreachable (simulated)')
       }
       aiResp = await sendChatMessage(content, messages)
+      if (isCoverLetterIntent(content)) {
+        aiResp = attachCoverLetterCta(aiResp)
+      }
     } catch (err) {
       // FR-9 / NFR-3 — Tầng 3 & 4 lỗi → vẫn gợi ý dùng Tầng 1 (bộ lọc thủ công)
       setTyping(false)
@@ -183,6 +226,10 @@ export default function Chat() {
 
   const handleKey = e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  const handleMessageAction = action => {
+    if (action?.to) navigate(action.to)
   }
 
   return (
@@ -222,7 +269,9 @@ export default function Chat() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-bg">
-        {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+        {messages.map(msg => (
+          <MessageBubble key={msg.id} msg={msg} onAction={handleMessageAction} />
+        ))}
 
         {/* Streaming bubble */}
         {streamText && (

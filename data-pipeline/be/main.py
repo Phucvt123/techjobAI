@@ -143,7 +143,7 @@ def get_top_skills(limit: int = Query(20, ge=1, le=50)):
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT skill_name, SUM(job_count) AS job_count FROM warehouse_marts.mart_skill_demand GROUP BY skill_name ORDER BY job_count DESC LIMIT %s;",
+        "SELECT skill_name, SUM(job_count) AS total_jobs FROM warehouse_marts.mart_skill_demand GROUP BY skill_name ORDER BY total_jobs DESC LIMIT %s;",
         [limit],
     )
     rows = cur.fetchall()
@@ -197,12 +197,43 @@ def semantic_search(
     return {"query": q, "results": rows}
 
 
-@app.get("/api/trends")
-def get_trends():
-    """Monthly hiring trends."""
+@app.get("/api/jobs-by-level")
+def get_jobs_by_level():
     conn = get_conn()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM warehouse_warehouse.agg_trend_monthly ORDER BY month;")
+    cur.execute("""
+        SELECT l.level_name_vi, COUNT(*) as job_count
+        FROM warehouse_warehouse.fact_job_postings f
+        JOIN warehouse_warehouse.dim_job_level l ON f.job_level_id = l.job_level_id
+        GROUP BY 1 ORDER BY 2 DESC
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {"data": rows}
+
+
+@app.get("/api/locations")
+def get_locations():
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT city_name_vi, job_count FROM warehouse_marts.mart_location_demand ORDER BY job_count DESC LIMIT 10;")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {"data": rows}
+
+
+@app.get("/api/skill-trends")
+def get_skill_trends():
+    """Monthly skill hiring trends."""
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT date_trunc('month', week_start)::date::text as month, skill_name, sum(job_count) as job_count 
+        FROM warehouse_marts.mart_skill_demand 
+        GROUP BY 1, 2 ORDER BY 1, 3 DESC
+    """)
     rows = cur.fetchall()
     cur.close()
     conn.close()
@@ -284,15 +315,60 @@ def predict_salary(
 @app.post("/api/cover-letter")
 async def generate_cover_letter_endpoint(
     cv_file: UploadFile = File(..., description="PDF file of candidate CV"),
-    job_id: str = Form(..., description="Job ID to generate cover letter for"),
+    job_id: str = Form(None, description="Job ID to generate cover letter for"),
+    job_title: str = Form("Software Engineer", description="Job Title"),
+    company_name: str = Form("Company", description="Company Name"),
+    job_description: str = Form("", description="Job Description text"),
     language: str = Form("Tiếng Việt", description="Output language"),
 ):
-    """Generate a personalized cover letter from CV (PDF) + Job Description.
-    Uses LLM with anti-hallucination prompting."""
-    from ai.cover_letter import generate_cover_letter_from_job_id
+    """Generate a personalized cover letter from CV (PDF) + Job Description."""
+    from ai.cover_letter import generate_cover_letter_from_job_id, generate_cover_letter, parse_cv_pdf
     cv_bytes = await cv_file.read()
-    result = generate_cover_letter_from_job_id(cv_bytes, job_id, language)
-    return result
+    
+    # Handle the mock UI CV gracefully
+    if cv_file.filename == "dummy.pdf":
+        cv_text = "Nguyễn Văn A\nSenior Frontend Developer\nKỹ năng: ReactJS, Node.js, TypeScript, UI/UX\nKinh nghiệm: 5 năm kinh nghiệm phát triển Web. Từng làm leader team Frontend tại TechCorp."
+    else:
+        try:
+            cv_text = parse_cv_pdf(cv_bytes)
+        except Exception as e:
+            return {"error": f"Lỗi đọc file PDF: {str(e)}"}
+            
+    if job_description and len(job_description.strip()) > 10:
+        return generate_cover_letter(cv_text, job_description, job_title, company_name, language)
+
+    if not job_id:
+        return {"error": "Missing job_id or job_description"}
+        
+    # If falling back to DB lookup, we can just fetch the job and call generate_cover_letter
+    # instead of generate_cover_letter_from_job_id which parses the pdf again
+    import psycopg2
+    import psycopg2.extras
+    import os
+    
+    DB_HOST = os.getenv("POSTGRES_HOST", "techjob-postgres-project")
+    DB_PORT = os.getenv("POSTGRES_PORT", "5432")
+    DB_USER = os.getenv("POSTGRES_USER", "postgres")
+    DB_PASS = os.getenv("POSTGRES_PASSWORD", "postgres")
+    DB_NAME = os.getenv("POSTGRES_DB", "techjob_ai")
+
+    conn = psycopg2.connect(
+        host=DB_HOST, port=int(DB_PORT), user=DB_USER, password=DB_PASS, dbname=DB_NAME
+    )
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT title, company_name, description, requirements FROM warehouse_warehouse.fact_job WHERE source_id = %s OR job_id::text = %s",
+        [job_id, job_id],
+    )
+    job = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not job:
+        return {"error": f"Job ID {job_id} not found in database."}
+
+    jd_text = f"{job['description'] or ''}\n\n{job['requirements'] or ''}"
+    return generate_cover_letter(cv_text, jd_text, job["title"], job["company_name"], language)
 
 
 @app.post("/api/train-salary-model")

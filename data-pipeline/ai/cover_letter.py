@@ -14,8 +14,15 @@ Usage:
 
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 from typing import Optional
+import re
+import unicodedata
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv(*_args, **_kwargs):
+        return False
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
@@ -59,32 +66,89 @@ def parse_cv_pdf(file_bytes: bytes) -> str:
 # COVER LETTER GENERATION
 # ============================================================
 
-COVER_LETTER_PROMPT_TEMPLATE = """Bạn là một chuyên gia Tuyển dụng (Headhunter) cấp cao và là chuyên gia viết thư ứng tuyển (Cover Letter) chuẩn quốc tế.
+VIETNAMESE_DIACRITICS = set(
+    "ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệ"
+    "íìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ"
+)
 
-## NHIỆM VỤ
-Viết một Cover Letter cá nhân hóa, mạnh mẽ, và có tính thuyết phục cao dựa trên CV của ứng viên và Mô tả công việc (JD) bên dưới.
+VIETNAMESE_STOPWORDS = {
+    "và", "của", "cho", "với", "trong", "tôi", "đã", "là", "các", "kỹ",
+    "năng", "kinh", "nghiệm", "học", "vấn", "dự", "án", "làm", "việc",
+}
 
-## QUY TẮC BẮT BUỘC (TUYỆT ĐỐI TUÂN THỦ)
-1. **SỬ DỤNG TÊN THẬT:** BẮT BUỘC đọc CV để trích xuất tên thật của ứng viên và xưng hô bằng tên thật đó. CHỈ DÙNG `[Tên của bạn]` nếu trong CV tuyệt đối không có bất kỳ tên người nào.
-2. **CHỐNG DỮ LIỆU RÁC (ANTI-TEMPLATE):** Lọc bỏ các cụm từ mẫu vô nghĩa như "Forename SURNAME", "123 Street", "Lorem Ipsum" (nếu có).
-3. **CẤM LẶP TỪ:** Không sử dụng các mẫu câu nhàm chán như "Tôi tin rằng", "Tôi đã có kinh nghiệm", "Tôi hân hạnh". Sử dụng các động từ chỉ hành động (Action Verbs) mạnh mẽ.
-4. **TRUNG THỰC:** CHỈ sử dụng thông tin có trong CV gốc. KHÔNG bịa đặt kỹ năng hoặc số năm kinh nghiệm ảo.
-5. **ĐỘ DÀI & NGÔN NGỮ:** Tối đa 350 từ. Viết bằng {language}. Tông giọng chuyên nghiệp, tự tin, định hướng kết quả.
+ENGLISH_CV_TERMS = {
+    "experience", "education", "skills", "projects", "activities", "summary",
+    "objective", "technologies", "programming", "languages", "interests",
+    "developed", "built", "participated", "university", "volunteer",
+}
 
-## CẤU TRÚC THƯ (CHUẨN QUỐC TẾ)
-1. **Hook (Mở bài thu hút - 1 đoạn):** Vào thẳng vấn đề. Thể hiện sự hào hứng và hiểu biết về {company_name}. Nêu bật ngay giá trị cốt lõi bạn mang lại cho vị trí {job_title}.
-2. **Value Proposition (Giá trị mang lại - Bullet points):** BẮT BUỘC sử dụng 2-3 gạch đầu dòng (Bullet points) ngắn gọn để đối chiếu các kỹ năng/thành tựu xuất sắc nhất trong CV khớp hoàn toàn với yêu cầu của JD. Bắt đầu mỗi gạch đầu dòng bằng một Action Verb.
-3. **Call to Action (Kết bài - 1 đoạn):** Khẳng định sự phù hợp với văn hóa/mục tiêu của công ty và mở lời cho một cuộc phỏng vấn.
 
-## THÔNG TIN ỨNG VIÊN (từ CV)
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text.lower())
+    return "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
+
+
+def detect_cv_language(cv_text: str) -> str:
+    """Detect whether the CV is primarily Vietnamese or English.
+
+    Product rule: the cover letter must be generated in the same language as
+    the CV. This deterministic detector keeps that decision stable and easy to
+    test instead of asking the LLM to infer it every time.
+    """
+    if not cv_text or not cv_text.strip():
+        return "English"
+
+    lower = cv_text.lower()
+    no_accents = _strip_accents(cv_text)
+    words = re.findall(r"[a-zA-ZÀ-ỹ]+", lower)
+    word_count = max(len(words), 1)
+
+    diacritic_count = sum(1 for ch in lower if ch in VIETNAMESE_DIACRITICS)
+    vietnamese_word_hits = sum(1 for word in words if word in VIETNAMESE_STOPWORDS)
+    english_term_hits = sum(1 for term in ENGLISH_CV_TERMS if term in no_accents)
+
+    if diacritic_count >= 8 or vietnamese_word_hits >= 4:
+        return "Tiếng Việt"
+
+    if english_term_hits >= 2 and diacritic_count / word_count < 0.03:
+        return "English"
+
+    return "Tiếng Việt" if diacritic_count > 0 or vietnamese_word_hits > 0 else "English"
+
+
+def resolve_cover_letter_language(cv_text: str, requested_language: str = "Auto") -> str:
+    """Resolve the final output language. CV language always wins."""
+    return detect_cv_language(cv_text)
+
+COVER_LETTER_PROMPT_TEMPLATE = """You are an expert Headhunter and professional Cover Letter writer.
+
+## TASK
+Write a highly personalized, compelling Cover Letter based on the candidate's CV and the Job Description (JD).
+
+## STRICT RULES
+1. **OUTPUT LANGUAGE:** {language}. This was detected from the CV and is ABSOLUTELY MANDATORY. Do NOT output the wrong language.
+2. **USE REAL NAME:** You MUST extract the candidate's real name from the CV.
+3. **NO FLUFF:** Remove meaningless template placeholders like "Forename SURNAME" from the CV text.
+4. **NO CLICHES:** Avoid overused phrases like "I believe". Use strong Action Verbs.
+5. **HONESTY:** ONLY use facts from the CV. DO NOT hallucinate skills or experience.
+6. **NATURAL TONE:** If writing in Vietnamese, use natural phrasing (do NOT literally translate English idioms like "a perfect fit"). If writing in English, use professional native phrasing.
+7. **LANGUAGE CONSISTENCY:** Every sentence, greeting, sign-off, and bullet must be in {language}. Do not mix Vietnamese and English except for proper nouns, company names, job titles, and technical terms.
+8. **LENGTH:** Max 350 words.
+
+## STRUCTURE
+1. **Hook (1 paragraph):** Get straight to the point. Show excitement about {company_name} and highlight core value for the {job_title} role.
+2. **Value Proposition (Bullet points):** 2-3 bullet points mapping the best skills/achievements in the CV to the JD requirements. Start with Action Verbs.
+3. **Call to Action (1 paragraph):** Reiterate culture fit and request an interview.
+
+## CANDIDATE CV
 ```
 {cv_text}
 ```
 
-## MÔ TẢ CÔNG VIỆC (JD)
-- **Vị trí:** {job_title}
-- **Công ty:** {company_name}
-- **Nội dung:**
+## JOB DESCRIPTION
+- **Title:** {job_title}
+- **Company:** {company_name}
+- **Details:**
 ```
 {job_description}
 ```
@@ -123,6 +187,7 @@ def generate_cover_letter(
     # Truncate inputs to manage token usage
     cv_truncated = cv_text[:3000] if len(cv_text) > 3000 else cv_text
     jd_truncated = job_description[:2000] if len(job_description) > 2000 else job_description
+    language = resolve_cover_letter_language(cv_text, language)
 
     prompt = COVER_LETTER_PROMPT_TEMPLATE.format(
         cv_text=cv_truncated,
@@ -151,6 +216,7 @@ def generate_cover_letter(
             "matched_skills": matched,
             "word_count": len(cover_letter_text.split()),
             "language": language,
+            "detected_cv_language": language,
             "job_title": job_title,
             "company_name": company_name,
         }

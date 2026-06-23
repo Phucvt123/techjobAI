@@ -89,12 +89,20 @@ def _make_tools():
         Key columns in fact_job_postings: job_id, company_id, job_title, salary_min, salary_max, working_locations, created_on.
         Only SELECT/WITH queries allowed. DELETE/UPDATE/DROP are blocked."""
         result = execute_sql(sql)
-        if isinstance(result, list) and len(result) > 15:
-            truncated_data = {
-                "notice": f"Kết quả quá lớn ({len(result)} dòng). Chỉ hiển thị 15 dòng đầu để tiết kiệm tokens.",
-                "data": result[:15]
-            }
-            return json.dumps(truncated_data, ensure_ascii=False, default=str)
+        if isinstance(result, list):
+            # Truncate long strings to prevent context_length_exceeded
+            for row in result:
+                if isinstance(row, dict):
+                    for k, v in row.items():
+                        if isinstance(v, str) and len(v) > 200:
+                            row[k] = v[:200] + "... [TRUNCATED]"
+
+            if len(result) > 5:
+                truncated_data = {
+                    "notice": f"Kết quả quá lớn ({len(result)} dòng). Chỉ hiển thị 5 dòng đầu để tiết kiệm tokens.",
+                    "data": result[:5]
+                }
+                return json.dumps(truncated_data, ensure_ascii=False, default=str)
         return json.dumps(result, ensure_ascii=False, default=str)
 
     @tool
@@ -130,10 +138,11 @@ def _make_tools():
         conn = _get_readonly_conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """SELECT f.source_id, f.title, f.company_name, f.primary_city,
-                      f.salary_text, f.salary_band, f.source_url,
+            """SELECT f.job_id, f.job_title, c.company_name, 
+                      f.salary_min, f.salary_max,
                       1 - (e.embedding <=> %s::vector) AS similarity
-               FROM warehouse_warehouse.fact_job f
+               FROM warehouse_warehouse.fact_job_postings f
+               JOIN warehouse_warehouse.dim_company c ON f.company_id = c.company_id
                JOIN warehouse_warehouse.job_embeddings e ON f.job_id = e.job_id
                ORDER BY e.embedding <=> %s::vector
                LIMIT %s;""",
