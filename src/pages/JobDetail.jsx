@@ -138,13 +138,13 @@ export default function JobDetail() {
                   {salaryPrediction && (
                     <AIBadge variant="mint">
                       <Bot size={11} />
-                      ~{Number(salaryPrediction.predicted_min || 0).toLocaleString('vi-VN')} – {Number(salaryPrediction.predicted_max || 0).toLocaleString('vi-VN')} VND (AI)
+                      ~{Number(salaryPrediction.predicted_min_vnd || 0).toLocaleString('vi-VN')} – {Number(salaryPrediction.predicted_max_vnd || 0).toLocaleString('vi-VN')} VND (AI)
                     </AIBadge>
                   )}
                   {job.aiEstimatedSalary && !salaryPrediction && (
                     <AIBadge variant="mint">
                       <Bot size={11} />
-                      ~${job.aiEstimatedSalary.toLocaleString()} ESTIMATED
+                      ~ {job.aiEstimatedSalary.toLocaleString('vi-VN')} VND (AI)
                     </AIBadge>
                   )}
                   <span className="text-xs text-text-muted">Posted {job.postedDate}</span>
@@ -302,7 +302,7 @@ export default function JobDetail() {
                     <Bot size={14} className="text-mint" /> AI Salary Prediction
                   </h3>
                   <p className="text-lg font-bold text-mint mb-1">
-                    {Number(salaryPrediction.predicted_min || 0).toLocaleString('vi-VN')} – {Number(salaryPrediction.predicted_max || 0).toLocaleString('vi-VN')} VND
+                    {Number(salaryPrediction.predicted_min_vnd || 0).toLocaleString('vi-VN')} – {Number(salaryPrediction.predicted_max_vnd || 0).toLocaleString('vi-VN')} VND
                   </p>
                   <p className="text-2xs text-text-muted">Dự đoán bởi mô hình AI dựa trên dữ liệu thị trường</p>
                 </Card>
