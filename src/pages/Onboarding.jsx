@@ -73,10 +73,6 @@ export default function Onboarding() {
   const validate = () => {
     const next = {}
     if (!form.name.trim()) next.name = 'Vui lòng nhập họ và tên.'
-    if (!form.title.trim()) next.title = 'Vui lòng nhập chức danh hoặc vị trí mong muốn.'
-    if (!form.phone.trim()) next.phone = 'Vui lòng nhập số điện thoại.'
-    if (!form.location.trim()) next.location = 'Vui lòng nhập địa điểm hiện tại.'
-    if (form.about.trim().length < 40) next.about = 'Giới thiệu bản thân nên có ít nhất 40 ký tự.'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -142,7 +138,7 @@ export default function Onboarding() {
           <div className="mb-5">
             <h2 className="text-xl font-bold text-text-primary">Thông tin cá nhân</h2>
             <p className="text-sm text-text-secondary mt-1">
-              Điền nhanh các trường cần thiết. Bạn vẫn có thể chỉnh sửa lại trong Profile sau.
+              Chỉ cần họ tên để bắt đầu. Các thông tin còn lại có thể bổ sung trong Profile sau.
             </p>
           </div>
 
@@ -162,11 +158,11 @@ export default function Onboarding() {
                 className="bg-gray-50 text-text-secondary"
               />
               <div className="relative">
-                <Input
-                  label="Chức danh / vị trí mong muốn"
-                  value={form.title}
-                  onChange={set('title')}
-                  error={errors.title}
+              <Input
+                label="Chức danh / vị trí mong muốn (tuỳ chọn)"
+                value={form.title}
+                onChange={set('title')}
+                error={errors.title}
                   placeholder="Senior Frontend Developer"
                   className="pl-9"
                 />
@@ -174,7 +170,7 @@ export default function Onboarding() {
               </div>
               <div className="relative">
                 <Input
-                  label="Số điện thoại"
+                  label="Số điện thoại (tuỳ chọn)"
                   value={form.phone}
                   onChange={set('phone')}
                   error={errors.phone}
@@ -185,7 +181,7 @@ export default function Onboarding() {
               </div>
               <div className="relative md:col-span-2">
                 <Input
-                  label="Địa điểm hiện tại"
+                  label="Địa điểm hiện tại (tuỳ chọn)"
                   value={form.location}
                   onChange={set('location')}
                   error={errors.location}
@@ -198,7 +194,7 @@ export default function Onboarding() {
 
             <div>
               <label className="text-xs font-medium text-text-secondary uppercase tracking-wide flex items-center gap-1.5 mb-1">
-                <UserRound size={13} /> About Me
+                <UserRound size={13} /> About Me (tuỳ chọn)
               </label>
               <textarea
                 rows={4}

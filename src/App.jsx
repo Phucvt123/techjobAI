@@ -18,13 +18,13 @@ export default function App() {
   return (
     <Routes>
       {/* Public auth routes */}
+      <Route path="/" element={<Navigate to="/register" replace />} />
       <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
-      <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
+      <Route path="/register" element={<Register />} />
       <Route path="/onboarding" element={<ProtectedRoute allowIncompleteProfile><Onboarding /></ProtectedRoute>} />
 
       {/* Protected app routes */}
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/jobs" element={<JobList />} />
         <Route path="/jobs/:id" element={<JobDetail />} />

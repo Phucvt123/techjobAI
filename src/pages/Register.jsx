@@ -46,7 +46,7 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false)
   const [serverError, setServerError] = useState('')
 
-  const { register } = useAuth()
+  const { register, logout } = useAuth()
   const navigate = useNavigate()
 
   const set = key => e => {
@@ -80,7 +80,14 @@ export default function Register() {
         email: form.email.trim(),
         password: form.password,
       })
-      navigate('/onboarding', { replace: true })
+      await logout()
+      navigate('/login', {
+        replace: true,
+        state: {
+          registeredEmail: form.email.trim(),
+          justRegistered: true,
+        },
+      })
     } catch (err) {
       setServerError(err.message || 'Đăng ký thất bại. Vui lòng thử lại.')
     } finally {

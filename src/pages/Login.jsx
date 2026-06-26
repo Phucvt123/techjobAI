@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react'
 import AuthLayout from '../components/AuthLayout'
@@ -20,6 +20,12 @@ export default function Login() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const from      = location.state?.from?.pathname || '/dashboard'
+
+  useEffect(() => {
+    if (location.state?.registeredEmail) {
+      setForm(f => ({ ...f, email: location.state.registeredEmail }))
+    }
+  }, [location.state])
 
   const set = key => e => {
     setForm(f => ({ ...f, [key]: e.target.value }))
@@ -57,6 +63,12 @@ export default function Login() {
       subtitle="Chào mừng trở lại! Đăng nhập để tiếp tục tìm việc."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {location.state?.justRegistered && (
+          <div className="px-3 py-2.5 rounded-lg bg-mint-bg border border-mint/30 text-sm text-mint-dark">
+            Đăng ký thành công. Vui lòng đăng nhập để hoàn thiện hồ sơ cá nhân.
+          </div>
+        )}
+
         {serverError && (
           <div className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
             {serverError}
