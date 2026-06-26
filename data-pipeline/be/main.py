@@ -134,6 +134,11 @@ app.add_middleware(
 STATIC_DIR = Path(__file__).resolve().parent.parent / "fe"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    
+    # Mount Vite's /assets so the monolithic frontend works out-of-the-box
+    ASSETS_DIR = STATIC_DIR / "assets"
+    if ASSETS_DIR.exists():
+        app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 # ============================================================
 # ENDPOINTS
