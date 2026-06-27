@@ -45,8 +45,11 @@ def get_model():
     if _search_model is None:
         with _search_model_lock:
             if _search_model is None:
+                import torch
+                torch.set_num_threads(1) # Tiết kiệm RAM
+                torch.set_grad_enabled(False) # Tắt gradient để tiết kiệm RAM
                 from sentence_transformers import SentenceTransformer
-                _search_model = SentenceTransformer("all-MiniLM-L6-v2")
+                _search_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
     return _search_model
 
 def get_conn():
