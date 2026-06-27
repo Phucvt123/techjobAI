@@ -78,7 +78,7 @@ def startup():
     global db_pool
     db_pool = pool.ThreadedConnectionPool(
         1,
-        30,  # Tăng max_connections từ 10 lên 30 để chịu tải song song
+        15,  # Giảm max_connections xuống 15 để tiết kiệm RAM trên Render Free Tier (512MB)
         host=DB_HOST,
         port=int(DB_PORT),
         user=DB_USER,
@@ -326,20 +326,28 @@ def get_jobs(
 
     results = []
     if ai_estimate.lower() == 'true':
-        from ai.salary_predictor import predict_hidden_salary
-        for job in jobs:
+        from ai.salary_predictor import predict_hidden_salaries
+        # Gather all jobs that need prediction
+        jobs_to_predict = []
+        for i, job in enumerate(jobs):
             d = dict(job)
-            if d.get("salary_min_vnd") is None and d.get("salary_max_vnd") is None:
-                pred = predict_hidden_salary(
-                    title=d.get("title", ""),
-                    city=d.get("primary_city", ""),
-                    level=d.get("job_level_vi", ""),
-                    work_mode=d.get("work_mode", ""),
-                    skills=d.get("skills", "") or ""
-                )
-                if pred:
-                    d["aiEstimatedSalary"] = pred.get("predicted_max_vnd")
             results.append(d)
+            if d.get("salary_min_vnd") is None and d.get("salary_max_vnd") is None:
+                jobs_to_predict.append({
+                    "index": i,
+                    "title": d.get("title", ""),
+                    "city": d.get("primary_city", ""),
+                    "level": d.get("job_level_vi", ""),
+                    "work_mode": d.get("work_mode", ""),
+                    "skills": d.get("skills", "") or ""
+                })
+        
+        # Predict in one vectorized batch
+        if jobs_to_predict:
+            preds = predict_hidden_salaries(jobs_to_predict)
+            for job_req, pred in zip(jobs_to_predict, preds):
+                if pred and "error" not in pred:
+                    results[job_req["index"]]["aiEstimatedSalary"] = pred.get("predicted_max_vnd")
     else:
         results = [dict(job) for job in jobs]
 
