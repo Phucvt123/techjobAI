@@ -5,7 +5,7 @@ TechJob AI là một nền tảng tìm kiếm việc làm IT thông minh, kết 
 ## Trải Nghiệm Ứng Dụng (Live Demo)
 
 Dự án đã được triển khai thực tế. Bạn có thể trải nghiệm trực tiếp tại:
-- **Website Demo**: [Vui lòng cập nhật đường dẫn tại đây]
+- **Website Demo**: https://techjob-ai.vercel.app/
 
 ## Các Tính Năng Nổi Bật
 
