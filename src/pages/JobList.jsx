@@ -132,7 +132,7 @@ export default function JobList() {
   const [searchParams] = useSearchParams()
   const queryParam = searchParams.get('q') || ''
 
-  const [loading, setLoading]   = useState(() => {
+  const [loading, setLoading] = useState(() => {
     const savedResults = sessionStorage.getItem('jobSearchResults')
     const savedQuery = sessionStorage.getItem('jobSearchQuery')
     if (savedResults && savedQuery === queryParam) return false
@@ -145,9 +145,9 @@ export default function JobList() {
     return null
   })
   const [searchError, setSearchError] = useState('')
-  const [filters, setFilters]   = useState({ locations: [], levels: [], types: [], salaryKey: 'Tất cả' })
+  const [filters, setFilters] = useState({ locations: [], levels: [], types: [], salaryKey: 'Tất cả' })
   const [showFilter, setShowFilter] = useState(false)
-  const [page, setPage]         = useState(1)
+  const [page, setPage] = useState(1)
   const [searchMode, setSearchMode] = useState('exact')
   const PAGE_SIZE = 10
 
@@ -227,8 +227,8 @@ export default function JobList() {
       if (queryParam && searchResults === null) {
         const q = queryParam.toLowerCase()
         if (!job.title.toLowerCase().includes(q) &&
-            !job.company.toLowerCase().includes(q) &&
-            !(job.skills || []).some(s => s.toLowerCase().includes(q))) return false
+          !job.company.toLowerCase().includes(q) &&
+          !(job.skills || []).some(s => s.toLowerCase().includes(q))) return false
       }
       if (filters.locations?.length && !filters.locations.includes(job.location)) return false
       if (filters.levels?.length && !filters.levels.includes(job.level)) return false
@@ -240,13 +240,13 @@ export default function JobList() {
   }, [jobs, searchResults, queryParam, filters, salaryRange])
 
   const paginated = filtered.slice(0, page * PAGE_SIZE)
-  const hasMore   = paginated.length < filtered.length
+  const hasMore = paginated.length < filtered.length
 
   const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPage(1) }
   const clearFilters = () => { setFilters({ locations: [], levels: [], types: [], salaryKey: 'Tất cả' }); setPage(1) }
 
   const activeCount = (filters.locations?.length || 0) + (filters.levels?.length || 0) +
-                      (filters.types?.length || 0) + (filters.salaryKey !== 'Tất cả' ? 1 : 0)
+    (filters.types?.length || 0) + (filters.salaryKey !== 'Tất cả' ? 1 : 0)
 
   return (
     <div className="animate-fade-in">
@@ -337,8 +337,8 @@ export default function JobList() {
             {loading
               ? Array(4).fill(0).map((_, i) => <JobCardSkeleton key={i} />)
               : filtered.length === 0
-              ? <EmptyState icon="🔍" title="Không tìm thấy kết quả" description="Thử điều chỉnh bộ lọc hoặc tìm kiếm với từ khoá khác." action={<Button onClick={clearFilters} variant="secondary" size="sm">Xoá bộ lọc</Button>} />
-              : paginated.map(job => <JobCard key={job.id} job={job} />)
+                ? <EmptyState icon="🔍" title="Không tìm thấy kết quả" description="Thử điều chỉnh bộ lọc hoặc tìm kiếm với từ khoá khác." action={<Button onClick={clearFilters} variant="secondary" size="sm">Xoá bộ lọc</Button>} />
+                : paginated.map(job => <JobCard key={job.id} job={job} />)
             }
           </div>
 

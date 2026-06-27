@@ -38,6 +38,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     await authService.logout()
     setUser(null)
+    sessionStorage.clear() // Xoá sạch mọi vùng nhớ tạm (chat, filter) khi đăng xuất
   }, [])
 
   return (
