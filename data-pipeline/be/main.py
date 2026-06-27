@@ -78,7 +78,7 @@ def startup():
     global db_pool
     db_pool = pool.ThreadedConnectionPool(
         1,
-        10,
+        30,  # Tăng max_connections từ 10 lên 30 để chịu tải song song
         host=DB_HOST,
         port=int(DB_PORT),
         user=DB_USER,
