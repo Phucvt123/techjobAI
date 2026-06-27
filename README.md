@@ -1,91 +1,98 @@
 # TechJob AI
 
-TechJob AI là một nền tảng tìm kiếm việc làm IT thông minh, kết hợp các công nghệ dữ liệu hiện đại và Trí tuệ Nhân tạo (AI) để mang lại trải nghiệm tối ưu cho ứng viên. Hệ thống được thiết kế hoàn chỉnh từ Data Pipeline (thu thập, xử lý dữ liệu), Data Warehouse, cho đến Backend AI và Frontend giao diện người dùng.
+TechJob AI là một nền tảng tìm kiếm việc làm IT thông minh, kết hợp các công nghệ xử lý dữ liệu hiện đại và Trí tuệ Nhân tạo (AI) để mang lại trải nghiệm tối ưu cho ứng viên. Hệ thống được thiết kế hoàn chỉnh từ Data Pipeline (thu thập, xử lý dữ liệu), Data Warehouse, cho đến Backend tích hợp AI và Frontend giao diện người dùng.
 
-## Tính Năng Nổi Bật
+## Trải Nghiệm Ứng Dụng (Live Demo)
 
-- **Hybrid Search (Tìm kiếm lai):** Kết hợp tìm kiếm chính xác theo Keyword (SQL `ILIKE`) và tìm kiếm theo ngữ nghĩa (Semantic Search sử dụng `pgvector` và mô hình `Sentence-Transformers`).
-- **AI Salary Predictor:** Dự đoán mức lương cho các công việc không hiển thị mức lương (Negotiable) dựa trên Machine Learning.
-- **Smart Dashboard & Market Insights:** Thống kê thị trường việc làm, biểu đồ mức lương trung bình, và nhu cầu kỹ năng theo thời gian thực.
-- **AI Cover Letter Generator:** Tự động tạo thư ứng tuyển dựa trên thông tin Profile cá nhân và mô tả công việc (JD).
-- **Data Warehouse Chuẩn ELT:** Luồng dữ liệu tự động cào tin tuyển dụng, làm sạch và chuyển đổi thông qua **Apache Airflow** và **dbt**.
+Dự án đã được triển khai thực tế. Bạn có thể trải nghiệm trực tiếp tại:
+- **Website Demo**: [Vui lòng cập nhật đường dẫn tại đây]
 
----
+## Các Tính Năng Nổi Bật
 
-## Kiến Trúc Hệ Thống (Tech Stack)
+- **Hybrid Search (Tìm kiếm lai)**: Kết hợp phương pháp tìm kiếm chính xác theo từ khóa (SQL `ILIKE`) và tìm kiếm theo ngữ nghĩa (Semantic Search sử dụng `pgvector` và mô hình `Sentence-Transformers`).
+- **AI Salary Predictor**: Dự đoán mức lương cho các công việc không công khai mức lương (Negotiable) dựa trên mô hình Machine Learning.
+- **Smart Dashboard & Market Insights**: Thống kê thị trường việc làm, biểu đồ mức lương trung bình, và nhu cầu kỹ năng theo thời gian thực.
+- **AI Cover Letter Generator**: Tự động tạo thư ứng tuyển (Cover Letter) dựa trên thông tin Profile cá nhân và mô tả công việc (JD) sử dụng Large Language Models (LLMs).
+- **Data Warehouse (Chuẩn ELT)**: Tự động hóa luồng dữ liệu (thu thập, làm sạch và chuyển đổi) thông qua hệ thống quản lý tác vụ Apache Airflow và dbt.
 
-- **Frontend:** React 18, Vite, Tailwind CSS, Recharts.
-- **Backend API:** FastAPI, Uvicorn, Python 3.10+.
-- **Database:** PostgreSQL (chạy Local qua Docker) tích hợp extension `pgvector`.
-- **Data Engineering:** Apache Airflow, dbt (Data Build Tool), MinIO, PySpark.
-- **AI / Machine Learning:** `sentence-transformers` (Tạo Vector Embeddings), Scikit-learn (Mô hình dự đoán lương), Groq API (LLM tạo Cover Letter).
+## Kiến Trúc Hệ Thống (Technology Stack)
 
----
+- **Frontend**: React 18, Vite, Tailwind CSS, Recharts.
+- **Backend API**: FastAPI, Uvicorn, Python 3.10+.
+- **Database**: PostgreSQL tích hợp extension `pgvector`.
+- **Data Engineering**: Apache Airflow, dbt (Data Build Tool), MinIO, PySpark.
+- **AI / Machine Learning**: `sentence-transformers` (Vector Embeddings), Scikit-learn (Salary Prediction), LangGraph & Groq API (AI Agent & Cover Letter).
 
-## Hướng Dẫn Cài Đặt & Chạy Dự Án (Local)
+## Mô Hình Hoạt Động
 
-### Yêu cầu hệ thống
-- **Node.js** (v18 trở lên)
-### Bước 1: Khởi động Cơ sở dữ liệu bằng Docker
-Để hệ thống có chỗ lưu trữ (PostgreSQL + vector data), bạn cần chạy Docker trước:
+### AI / ML Runtime Model
+
+Người dùng cuối (End users) không bao giờ kết nối trực tiếp đến cơ sở dữ liệu (NeonDB). Trình duyệt chỉ giao tiếp với Backend FastAPI thông qua biến môi trường `VITE_API_URL`. Backend sẽ quản lý và bảo mật toàn bộ các phiên kết nối đến Data Warehouse, Machine Learning models và LLMs thông qua tệp cấu hình `.env`.
+
+```text
+User Browser -> React Frontend -> FastAPI Backend -> Database / ML Models / LLMs
+```
+
+Đối với các tính năng AI chạy local, Backend yêu cầu tệp `.env` đặt tại thư mục `data-pipeline` với các biến môi trường kết nối cơ sở dữ liệu hợp lệ (ví dụ: `NEON_HOST`, `NEON_DB`, `NEON_USER`, `NEON_PASSWORD`, và `NEON_SSLMODE=require`). Chỉ các thành viên phụ trách dữ liệu hoặc Machine Learning mới được cấp quyền truy cập trực tiếp vào Data Warehouse.
+
+### Cấu Trúc Thư Mục Hệ Thống
+
+```text
+techjobAI/
+├── src/                  # Mã nguồn Frontend (React, Components, Pages)
+├── data-pipeline/        # Mã nguồn Backend API và Data Engineering
+│   ├── be/               # FastAPI Backend (APIs, Database Connections, MCP Server)
+│   ├── ai/               # AI scripts (Embeddings, Predictor, Agent)
+│   ├── dbt_vietnamworks/ # Data transformations (ELT workflows)
+│   ├── docker-compose.yml# Cấu hình hạ tầng Docker
+│   └── requirements.txt  # Danh sách thư viện Python
+└── docs/                 # Tài liệu thiết kế hệ thống và API Docs
+```
+
+## Hướng Dẫn Môi Trường Phát Triển (Local Setup)
+
+Tài liệu này dành cho các nhà phát triển muốn khởi chạy hoặc đóng góp vào mã nguồn của dự án trên môi trường Local. Nếu bạn chỉ muốn xem tính năng, vui lòng truy cập Website Demo ở phần trên.
+
+### Yêu Cầu Cài Đặt Khởi Điểm
+- Node.js (v18 trở lên)
+- Docker & Docker Compose
+- Python 3.10+
+
+### Bước 1: Khởi Động Cơ Sở Dữ Liệu
+
+Khởi tạo cơ sở dữ liệu PostgreSQL (hỗ trợ pgvector) thông qua Docker:
+
 ```bash
 cd data-pipeline
 docker compose up -d postgres-project
 ```
 
-### Bước 2: Chạy Backend API (FastAPI)
-Mở một terminal mới để chạy server Backend:
+### Bước 2: Khởi Chạy Backend API (FastAPI)
+
+Cấu hình tệp `data-pipeline/.env`, cài đặt thư viện và khởi chạy server FastAPI:
+
 ```bash
 cd data-pipeline
-# Kích hoạt môi trường ảo (nếu có)
+# Kích hoạt môi trường ảo (Virtual Environment)
 .\.venv\Scripts\Activate
-
-# Khởi chạy API
+# Cài đặt thư viện
+pip install -r requirements.txt
+# Khởi chạy server
 uvicorn be.main:app --reload --host 0.0.0.0 --port 8000
 ```
-- **Backend API** sẽ có sẵn tại: `http://localhost:8000`
-- **Tài liệu API (Swagger)** tại: `http://localhost:8000/docs`
+- **API Server**: `http://localhost:8000`
+- **Tài liệu API (Swagger)**: `http://localhost:8000/docs`
 
-### Bước 3: Chạy Frontend (React)
-Mở một terminal khác tại thư mục gốc của dự án (`techjobAI`):
+### Bước 3: Khởi Chạy Frontend (React)
+
+Mở một Terminal mới tại thư mục gốc của dự án (`techjobAI`):
+
 ```bash
 npm install
 npm run dev
 ```
-Truy cập vào trang web tại: **http://localhost:5173**
+Trang web sẽ khả dụng tại địa chỉ: `http://localhost:5173`
 
----
+## Tài Liệu Tham Khảo
 
----
-
-## Cấu Trúc Thư Mục Chính
-```text
-techjobAI/
-├── src/                # Toàn bộ mã nguồn Frontend (React, Components, Pages)
-├── data-pipeline/      # Nơi chứa mã nguồn Backend và Data Engineering
-│   ├── be/             # FastAPI Backend (APIs, Database Connection)
-│   ├── ai/             # Các scripts xử lý AI (Embeddings, Predictor)
-│   ├── dbt_vietnamworks/ # Data transformations (ELT)
-│   ├── docker-compose.yml # File cấu hình Docker
-│   └── ...
-└── docs/               # Chứa các tài liệu thiết kế hệ thống, API Docs
-```
-
-## Chú thích thêm
-- Dự án mặc định được cấu hình để trỏ vào Database PostgreSQL Local. Nếu bạn muốn kết nối với Database trên Cloud (NeonDB), hãy cấu hình các biến `NEON_` trong file `.env`.
-- Để biết chi tiết các đường dẫn API Backend đang hoạt động, vui lòng xem file [docs/api_read.md](docs/api_read.md).
-
-## AI / ML runtime model
-
-End users never connect to NeonDB directly. The browser only calls the FastAPI
-backend through `VITE_API_URL`; the backend owns all warehouse, ML, and LLM
-credentials through `data-pipeline/.env`.
-
-```text
-User browser -> React frontend -> FastAPI backend -> NeonDB / ML model / LLM
-```
-
-For local AI features, run the backend with `data-pipeline/.env` containing
-`NEON_HOST`, `NEON_DB`, `NEON_USER`, `NEON_PASSWORD`, and `NEON_SSLMODE=require`.
-Only data/ML teammates should receive read-only warehouse credentials for
-direct SQL analysis or model training.
+Để xem chi tiết danh sách các Endpoints của Backend API đang hoạt động, vui lòng tham khảo tài liệu [docs/api_read.md](docs/api_read.md).
