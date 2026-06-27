@@ -1,4 +1,5 @@
 import psycopg2
+from ai.db_config import psycopg2_kwargs
 
 import os
 from pathlib import Path
@@ -9,14 +10,7 @@ ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(ENV_PATH)
 
 try:
-    conn = psycopg2.connect(
-        host=os.getenv("NEON_HOST", os.getenv("POSTGRES_HOST", "localhost")),
-        port=int(os.getenv("NEON_PORT", os.getenv("POSTGRES_PORT", "5432"))),
-        user=os.getenv("NEON_USER", os.getenv("POSTGRES_USER", "techjob")),
-        password=os.getenv("NEON_PASSWORD", os.getenv("POSTGRES_PASSWORD", "techjob123")),
-        dbname=os.getenv("NEON_DB", os.getenv("POSTGRES_DB", "techjob_ai")),
-        sslmode="require" if os.getenv("NEON_HOST") else os.getenv("PGSSLMODE", "prefer")
-    )
+    conn = psycopg2.connect(**psycopg2_kwargs())
     cur = conn.cursor()
 
     print("Columns of mart_skill_demand:")

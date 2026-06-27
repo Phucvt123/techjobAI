@@ -74,3 +74,18 @@ techjobAI/
 ## Chú thích thêm
 - Dự án mặc định được cấu hình để trỏ vào Database PostgreSQL Local. Nếu bạn muốn kết nối với Database trên Cloud (NeonDB), hãy cấu hình các biến `NEON_` trong file `.env`.
 - Để biết chi tiết các đường dẫn API Backend đang hoạt động, vui lòng xem file [docs/api_read.md](docs/api_read.md).
+
+## AI / ML runtime model
+
+End users never connect to NeonDB directly. The browser only calls the FastAPI
+backend through `VITE_API_URL`; the backend owns all warehouse, ML, and LLM
+credentials through `data-pipeline/.env`.
+
+```text
+User browser -> React frontend -> FastAPI backend -> NeonDB / ML model / LLM
+```
+
+For local AI features, run the backend with `data-pipeline/.env` containing
+`NEON_HOST`, `NEON_DB`, `NEON_USER`, `NEON_PASSWORD`, and `NEON_SSLMODE=require`.
+Only data/ML teammates should receive read-only warehouse credentials for
+direct SQL analysis or model training.
